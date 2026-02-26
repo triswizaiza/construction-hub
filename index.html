@@ -1,0 +1,1230 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  Calculator, 
+  FolderKanban, 
+  Settings, 
+  Plus, 
+  Trash2, 
+  TrendingUp, 
+  AlertCircle, 
+  CheckCircle2,
+  HardHat,
+  ArrowLeft,
+  User,
+  MapPin,
+  Calendar,
+  Save,
+  X,
+  Banknote,
+  Bell,
+  Search,
+  ChevronDown,
+  Edit2,
+  ShieldCheck,
+  ShieldAlert,
+  Activity,
+  Lock,
+  Unlock,
+  Users as UsersIcon,
+  LogOut,
+  Shield,
+  Download,
+  FileText,
+  Clock,
+  SearchX
+} from 'lucide-react';
+
+// --- HELPER FUNCTIONS FOR IDR ---
+const formatIDR = (num) => {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+};
+
+const formatCompactIDR = (num) => {
+  if (num >= 1e9) return `Rp ${(num / 1e9).toFixed(1)} M`;
+  if (num >= 1e6) return `Rp ${(num / 1e6).toFixed(1)} Jt`;
+  if (num >= 1e3) return `Rp ${(num / 1e3).toFixed(1)} Rb`;
+  return formatIDR(num);
+};
+
+// --- MOCK USERS & PRIVILEGED ACCESS MANAGEMENT (PAM) ---
+const USERS = [
+  { id: 'u1', name: 'John Doe', role: 'CEO / Admin', initials: 'JD', color: 'from-indigo-600 to-blue-700' },
+  { id: 'u2', name: 'Sarah Jenkins', role: 'Project Manager', initials: 'SJ', color: 'from-emerald-500 to-teal-600' },
+  { id: 'u3', name: 'Mike Ross', role: 'Chief Estimator', initials: 'MR', color: 'from-amber-500 to-orange-600' },
+  { id: 'u4', name: 'Client A', role: 'Stakeholder', initials: 'CA', color: 'from-slate-500 to-slate-700' }
+];
+
+const PERMISSIONS = {
+  'CEO / Admin': ['edit_company', 'edit_projects', 'edit_boq', 'manage_users'],
+  'Project Manager': ['edit_projects'],
+  'Chief Estimator': ['edit_boq'],
+  'Stakeholder': [] // Read only
+};
+
+// --- MOCK ACTIVITY LOG ---
+const RECENT_ACTIVITY = [
+  { id: 1, user: USERS[1], action: 'updated phase progress', target: 'Skyline Tower Alpha', time: '2 hours ago' },
+  { id: 2, user: USERS[2], action: 'modified BOQ rate', target: 'Steel Rebar', time: '5 hours ago' },
+  { id: 3, user: USERS[0], action: 'approved budget increase', target: 'Harbor Retail Complex', time: '1 day ago' },
+  { id: 4, user: USERS[1], action: 'marked phase complete', target: 'Westside Residential', time: '2 days ago' },
+];
+
+// --- ENRICHED MOCK INITIAL DATA (IDR) ---
+const initialProjects = [
+  { 
+    id: 1, name: 'Skyline Tower Alpha', status: 'In Progress', budget: 22500000000, spent: 12500000000, completion: 65,
+    manager: 'Sarah Jenkins', location: 'Jakarta Pusat, Sektor 4', dueDate: '2026-11-15',
+    phases: [
+      { id: 101, name: 'Site Preparation & Excavation', status: 'Completed', progress: 100 },
+      { id: 102, name: 'Foundation & Substructure', status: 'Completed', progress: 100 },
+      { id: 103, name: 'Superstructure Framing', status: 'In Progress', progress: 45 },
+      { id: 104, name: 'MEP Rough-in', status: 'Pending', progress: 0 },
+      { id: 105, name: 'Interior Finishing', status: 'Pending', progress: 0 }
+    ],
+    team: [USERS[0], USERS[1], USERS[2]]
+  },
+  { 
+    id: 2, name: 'Harbor Retail Complex', status: 'Planning', budget: 12500000000, spent: 750000000, completion: 5,
+    manager: 'David Chen', location: 'Pantai Indah Kapuk', dueDate: '2027-03-01',
+    phases: [
+      { id: 201, name: 'Permits & Approvals', status: 'In Progress', progress: 60 },
+      { id: 202, name: 'Site Clearing', status: 'Pending', progress: 0 },
+      { id: 203, name: 'Foundation', status: 'Pending', progress: 0 }
+    ],
+    team: [USERS[0], USERS[3]]
+  },
+  { 
+    id: 3, name: 'Westside Residential', status: 'Completed', budget: 35000000000, spent: 34500000000, completion: 100,
+    manager: 'Marcus Johnson', location: 'BSD City, Tangerang', dueDate: '2025-10-20',
+    phases: [
+      { id: 301, name: 'Phase 1 - Townhomes', status: 'Completed', progress: 100 },
+      { id: 302, name: 'Phase 2 - Apartments', status: 'Completed', progress: 100 },
+      { id: 303, name: 'Landscaping & Handover', status: 'Completed', progress: 100 }
+    ],
+    team: [USERS[0], USERS[1]]
+  },
+];
+
+const initialBOQ = [
+  { id: 1, name: 'Structural Concrete (K-350)', type: 'Material', quantity: 500, unit: 'm3', unitCost: 1250000 },
+  { id: 2, name: 'Steel Rebar', type: 'Material', quantity: 50, unit: 'tons', unitCost: 12000000 },
+  { id: 3, name: 'Site Excavation', type: 'Equipment', quantity: 120, unit: 'hours', unitCost: 250000 },
+  { id: 4, name: 'General Labor', type: 'Labor', quantity: 1000, unit: 'days', unitCost: 150000 },
+  { id: 5, name: 'Project Management', type: 'Labor', quantity: 160, unit: 'days', unitCost: 500000 },
+];
+
+export default function App() {
+  // PAM State
+  const [currentUser, setCurrentUser] = useState(USERS[0]);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // App States
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [projects, setProjects] = useState(initialProjects);
+  const [boqItems, setBoqItems] = useState(initialBOQ);
+  const [estimatedRevenue, setEstimatedRevenue] = useState(4000000000);
+  const [companyBudget, setCompanyBudget] = useState(100000000000); 
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Edit States
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [editingProjectData, setEditingProjectData] = useState(null);
+  const [isAddingProject, setIsAddingProject] = useState(false);
+  const [newProjectData, setNewProjectData] = useState({ name: '', manager: '', location: '', dueDate: '', budget: 0 });
+
+  // PAM Guard: Check if current user has permission
+  const hasPerm = (perm) => PERMISSIONS[currentUser.role].includes(perm);
+
+  // PAM Guard: Reset sensitive edit states if user is switched
+  useEffect(() => {
+    if (!hasPerm('edit_company')) setIsEditingBudget(false);
+    if (!hasPerm('edit_projects')) {
+      setIsEditingProject(false);
+      setIsAddingProject(false);
+    }
+    setShowUserMenu(false);
+  }, [currentUser]);
+
+  // Global Search Handler
+  const handleSearchInput = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (val.length > 0 && activeTab !== 'projects' && activeTab !== 'project-details') {
+      setActiveTab('projects');
+      setIsEditingProject(false);
+    }
+  };
+
+  // Filter Projects based on Search
+  const filteredProjects = projects.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.manager.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // --- CALCULATIONS ENGINE ---
+  const boqCalculations = useMemo(() => {
+    let totalMaterial = 0, totalLabor = 0, totalEquipment = 0, totalCost = 0;
+    boqItems.forEach(item => {
+      const cost = item.quantity * item.unitCost;
+      totalCost += cost;
+      if (item.type === 'Material') totalMaterial += cost;
+      if (item.type === 'Labor') totalLabor += cost;
+      if (item.type === 'Equipment') totalEquipment += cost;
+    });
+    const grossProfit = estimatedRevenue - totalCost;
+    const profitMargin = estimatedRevenue > 0 ? ((grossProfit / estimatedRevenue) * 100).toFixed(1) : 0;
+    return { totalMaterial, totalLabor, totalEquipment, totalCost, grossProfit, profitMargin };
+  }, [boqItems, estimatedRevenue]);
+
+  const globalMetrics = useMemo(() => {
+    const totalAllocated = projects.reduce((acc, curr) => acc + curr.budget, 0);
+    const totalSpent = projects.reduce((acc, curr) => acc + curr.spent, 0);
+    const activeCount = projects.filter(p => p.status === 'In Progress').length;
+    return { totalAllocated, totalSpent, activeCount };
+  }, [projects]);
+
+  const getProjectHealth = (project) => {
+    if (project.spent > project.budget) return 'Critical';
+    const expectedSpendRatio = project.completion / 100;
+    const actualSpendRatio = project.budget > 0 ? project.spent / project.budget : 0;
+    if (actualSpendRatio > expectedSpendRatio + 0.15) return 'At Risk';
+    return 'On Track';
+  };
+
+  // --- HANDLERS FOR BOQ ---
+  const handleAddBoqItem = () => {
+    if (!hasPerm('edit_boq')) return;
+    const newItem = { id: Date.now(), name: 'New Item', type: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 };
+    setBoqItems([...boqItems, newItem]);
+  };
+  const handleUpdateBoqItem = (id, field, value) => {
+    if (!hasPerm('edit_boq')) return;
+    setBoqItems(boqItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+  const handleRemoveBoqItem = (id) => {
+    if (!hasPerm('edit_boq')) return;
+    setBoqItems(boqItems.filter(item => item.id !== id));
+  };
+
+  // --- HANDLERS FOR PROJECTS ---
+  const handleProjectClick = (id) => {
+    setSelectedProjectId(id);
+    setIsEditingProject(false);
+    setActiveTab('project-details');
+    setSearchQuery(''); // clear search when diving into details
+  };
+
+  const startEditingProject = (project) => {
+    if (!hasPerm('edit_projects')) return;
+    setEditingProjectData(JSON.parse(JSON.stringify(project)));
+    setIsEditingProject(true);
+  };
+
+  const saveProjectDetails = () => {
+    if (!hasPerm('edit_projects')) return;
+    const totalPhases = editingProjectData.phases.length;
+    const totalProgress = editingProjectData.phases.reduce((acc, phase) => acc + phase.progress, 0);
+    const updatedCompletion = totalPhases > 0 ? Math.round(totalProgress / totalPhases) : 0;
+    
+    let updatedStatus = editingProjectData.status;
+    if (updatedCompletion === 100) updatedStatus = 'Completed';
+    else if (updatedCompletion > 0 && updatedCompletion < 100) updatedStatus = 'In Progress';
+
+    const finalizedProject = { ...editingProjectData, completion: updatedCompletion, status: updatedStatus };
+    setProjects(projects.map(p => p.id === finalizedProject.id ? finalizedProject : p));
+    setIsEditingProject(false);
+  };
+
+  const handlePhaseProgressChange = (phaseId, newProgress) => {
+    if (!hasPerm('edit_projects')) return;
+    const progress = parseInt(newProgress);
+    let status = 'Pending';
+    if (progress === 100) status = 'Completed';
+    else if (progress > 0) status = 'In Progress';
+
+    const updatedPhases = editingProjectData.phases.map(phase => 
+      phase.id === phaseId ? { ...phase, progress, status } : phase
+    );
+    setEditingProjectData({ ...editingProjectData, phases: updatedPhases });
+  };
+
+  const handleAddNewProject = () => {
+    if (!hasPerm('edit_projects')) return;
+    const newProject = {
+      id: Date.now(),
+      name: newProjectData.name || 'Untitled Project',
+      status: 'Planning',
+      budget: Number(newProjectData.budget),
+      spent: 0,
+      completion: 0,
+      manager: newProjectData.manager || 'Unassigned',
+      location: newProjectData.location || 'TBD',
+      dueDate: newProjectData.dueDate || 'TBD',
+      phases: [{ id: Date.now() + 1, name: 'Initial Planning', status: 'Pending', progress: 0 }],
+      team: [currentUser]
+    };
+    setProjects([...projects, newProject]);
+    setIsAddingProject(false);
+    setNewProjectData({ name: '', manager: '', location: '', dueDate: '', budget: 0 });
+    setSearchQuery('');
+  };
+
+
+  // --- SVG DONUT CHART COMPONENT ---
+  const DonutChart = ({ data, total }) => {
+    let cumulativePercent = 0;
+    const getCoordinatesForPercent = (percent) => {
+      const x = Math.cos(2 * Math.PI * percent);
+      const y = Math.sin(2 * Math.PI * percent);
+      return [x, y];
+    };
+
+    return (
+      <svg viewBox="-1 -1 2 2" className="w-56 h-56 transform -rotate-90 filter drop-shadow-md">
+        {data.map((slice, i) => {
+          if (slice.value === 0) return null;
+          const startPercent = cumulativePercent;
+          const slicePercent = slice.value / total;
+          cumulativePercent += slicePercent;
+          const endPercent = cumulativePercent;
+
+          const [startX, startY] = getCoordinatesForPercent(startPercent);
+          const [endX, endY] = getCoordinatesForPercent(endPercent);
+          const largeArcFlag = slicePercent > 0.5 ? 1 : 0;
+          
+          if (slicePercent === 1) return <circle key={i} cx="0" cy="0" r="1" fill={slice.color} />;
+
+          const pathData = [`M ${startX} ${startY}`, `A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY}`, `L 0 0`].join(' ');
+          return <path key={i} d={pathData} fill={slice.color} className="hover:opacity-80 transition-opacity cursor-pointer" />;
+        })}
+        <circle cx="0" cy="0" r="0.75" fill="white" />
+      </svg>
+    );
+  };
+
+  // --- VIEWS ---
+  const renderDashboard = () => {
+    const chartData = [
+      { name: 'Materials', value: boqCalculations.totalMaterial, color: '#4f46e5' }, // indigo-600
+      { name: 'Labor', value: boqCalculations.totalLabor, color: '#f59e0b' },      // amber-500
+      { name: 'Equipment', value: boqCalculations.totalEquipment, color: '#10b981' }, // emerald-500
+    ];
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300">
+        <div>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Executive Dashboard</h2>
+          <p className="text-slate-500 font-medium mt-1">Enterprise portfolio performance and financial overview.</p>
+        </div>
+        
+        {/* Top Tier KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Editable Company Budget Card with PAM protection */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all relative group overflow-hidden">
+            {isEditingBudget && hasPerm('edit_company') ? (
+              <div className="absolute inset-0 bg-white p-6 z-10 flex flex-col justify-center animate-in zoom-in-95">
+                <label className="text-xs text-slate-500 font-bold mb-2 tracking-wider">SET COMPANY BUDGET (IDR)</label>
+                <div className="flex space-x-2">
+                  <input type="number" autoFocus value={companyBudget} onChange={e => setCompanyBudget(Number(e.target.value))} className="w-full border-b-2 border-indigo-500 outline-none font-black text-xl text-slate-800 bg-slate-50 px-2"/>
+                  <button onClick={() => setIsEditingBudget(false)} className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition-colors"><CheckCircle2 size={20}/></button>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1 flex items-center">
+                  Company Budget 
+                  {hasPerm('edit_company') ? (
+                    <button onClick={() => setIsEditingBudget(true)} className="ml-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all bg-slate-100 p-1 rounded" title="Edit Budget"><Edit2 size={12}/></button>
+                  ) : (
+                    <Lock size={12} className="ml-2 text-slate-300" title="Locked by Administrator" />
+                  )}
+                </p>
+                <h3 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">{formatCompactIDR(companyBudget)}</h3>
+              </div>
+              <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl"><Banknote size={24} /></div>
+            </div>
+            <div className="mt-5">
+               <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1.5">
+                 <span>Allocated: {formatCompactIDR(globalMetrics.totalAllocated)}</span>
+                 <span>{(globalMetrics.totalAllocated / companyBudget * 100).toFixed(0)}%</span>
+               </div>
+               <div className="w-full bg-slate-100 rounded-full h-1.5 flex overflow-hidden">
+                 <div className="bg-indigo-600 h-1.5 rounded-full" style={{width: `${Math.min((globalMetrics.totalAllocated / companyBudget) * 100, 100)}%`}}></div>
+               </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1">Portfolio Spend</p>
+                <h3 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">{formatCompactIDR(globalMetrics.totalSpent)}</h3>
+              </div>
+              <div className="p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl"><TrendingUp size={24} /></div>
+            </div>
+            <div className="mt-5">
+               <div className="flex justify-between text-xs font-semibold text-slate-500 mb-1.5">
+                 <span>Burn Rate vs Allocated</span>
+                 <span>{globalMetrics.totalAllocated > 0 ? (globalMetrics.totalSpent / globalMetrics.totalAllocated * 100).toFixed(0) : 0}%</span>
+               </div>
+               <div className="w-full bg-slate-100 rounded-full h-1.5 flex overflow-hidden">
+                 <div className="bg-rose-500 h-1.5 rounded-full" style={{width: `${Math.min((globalMetrics.totalSpent / globalMetrics.totalAllocated) * 100, 100)}%`}}></div>
+               </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1">Active Projects</p>
+                <h3 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">{globalMetrics.activeCount}</h3>
+              </div>
+              <div className="p-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl"><FolderKanban size={24} /></div>
+            </div>
+            <p className="text-sm font-medium text-slate-500 mt-4">Out of {projects.length} total across portfolio</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1">Est. BOQ Margin</p>
+                <h3 className={`text-2xl lg:text-3xl font-black tracking-tight ${boqCalculations.profitMargin >= 15 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                  {boqCalculations.profitMargin}%
+                </h3>
+              </div>
+              <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl"><CheckCircle2 size={24} /></div>
+            </div>
+            <p className="text-sm font-medium text-slate-500 mt-4">Based on active calculation engine</p>
+          </div>
+        </div>
+
+        {/* Dashboard Grid Row 2 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Project Variances with Health (Takes 2 columns) */}
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 col-span-1 lg:col-span-2 flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-800">Portfolio Budget Variances</h3>
+              <button onClick={() => setActiveTab('projects')} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors">View All Projects &rarr;</button>
+            </div>
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2">
+              {projects.map(project => {
+                const percentSpent = project.budget > 0 ? (project.spent / project.budget) * 100 : 0;
+                const isOverBudget = percentSpent > 100;
+                const health = getProjectHealth(project);
+                
+                const healthColors = {
+                  'On Track': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                  'At Risk': 'bg-amber-50 text-amber-700 border-amber-200',
+                  'Critical': 'bg-rose-50 text-rose-700 border-rose-200'
+                };
+                const HealthIcon = health === 'On Track' ? ShieldCheck : health === 'At Risk' ? Activity : ShieldAlert;
+
+                return (
+                  <div key={project.id} className="cursor-pointer group block" onClick={() => handleProjectClick(project.id)}>
+                    <div className="flex justify-between items-end mb-2">
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{project.name}</span>
+                        <span className={`flex items-center text-xs px-2.5 py-1 rounded-md font-bold border ${healthColors[health]}`}>
+                          <HealthIcon size={12} className="mr-1.5"/> {health}
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-slate-600">
+                        {formatCompactIDR(project.spent)} <span className="text-slate-400 font-medium">/ {formatCompactIDR(project.budget)}</span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className={`h-3 rounded-full transition-all duration-500 ${isOverBudget ? 'bg-rose-500' : 'bg-indigo-500'}`} 
+                        style={{ width: `${Math.min(percentSpent, 100)}%` }}
+                      ></div>
+                    </div>
+                    {isOverBudget && (
+                      <p className="text-xs font-bold text-rose-500 mt-2 flex items-center">
+                        <AlertCircle size={14} className="mr-1"/> Over budget by {formatIDR(project.spent - project.budget)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Activity Feed (Takes 1 column) */}
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 col-span-1 flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-slate-800">System Activity</h3>
+              <div className="p-2 bg-slate-50 text-slate-400 rounded-lg"><Clock size={18}/></div>
+            </div>
+            <div className="space-y-6">
+               {RECENT_ACTIVITY.map((activity, idx) => (
+                 <div key={idx} className="flex space-x-4">
+                    <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${activity.user.color} text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm mt-0.5`}>
+                      {activity.user.initials}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-700">
+                        <span className="font-bold text-slate-900">{activity.user.name}</span> {activity.action} on <span className="font-semibold text-indigo-600 cursor-pointer hover:underline">{activity.target}</span>.
+                      </p>
+                      <p className="text-xs font-medium text-slate-400 mt-1">{activity.time}</p>
+                    </div>
+                 </div>
+               ))}
+            </div>
+            <button className="w-full mt-auto pt-6 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors text-center">
+              View Full Audit Log
+            </button>
+          </div>
+
+        </div>
+
+        {/* Dashboard Grid Row 3 (BOQ Detail) */}
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row items-center lg:items-start space-y-8 lg:space-y-0 lg:space-x-12">
+            <div className="flex-1 w-full">
+              <h3 className="text-xl font-black text-slate-800 mb-2">BOQ Resource Allocation</h3>
+              <p className="text-sm font-medium text-slate-500 mb-8">Breakdown of estimated costs across all standardized material, labor, and equipment resources.</p>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-sm p-4 bg-slate-50 hover:bg-indigo-50/50 transition-colors rounded-xl border border-slate-100">
+                  <div className="flex items-center font-bold text-slate-700"><span className="w-4 h-4 rounded-full bg-indigo-600 mr-4 shadow-sm"></span>Materials Subtotal</div>
+                  <span className="font-black text-slate-900 text-lg">{formatCompactIDR(boqCalculations.totalMaterial)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm p-4 bg-slate-50 hover:bg-amber-50/50 transition-colors rounded-xl border border-slate-100">
+                  <div className="flex items-center font-bold text-slate-700"><span className="w-4 h-4 rounded-full bg-amber-500 mr-4 shadow-sm"></span>Labor Subtotal</div>
+                  <span className="font-black text-slate-900 text-lg">{formatCompactIDR(boqCalculations.totalLabor)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm p-4 bg-slate-50 hover:bg-emerald-50/50 transition-colors rounded-xl border border-slate-100">
+                  <div className="flex items-center font-bold text-slate-700"><span className="w-4 h-4 rounded-full bg-emerald-500 mr-4 shadow-sm"></span>Equipment Subtotal</div>
+                  <span className="font-black text-slate-900 text-lg">{formatCompactIDR(boqCalculations.totalEquipment)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative flex justify-center items-center h-64 w-64 shrink-0">
+               {boqCalculations.totalCost > 0 ? (
+                 <>
+                  <DonutChart data={chartData} total={boqCalculations.totalCost} />
+                  <div className="absolute flex flex-col items-center text-center">
+                    <span className="text-xs font-bold text-slate-400 tracking-widest mb-1">TOTAL ESTIMATE</span>
+                    <span className="text-xl font-black text-slate-900">{formatCompactIDR(boqCalculations.totalCost)}</span>
+                  </div>
+                 </>
+               ) : (
+                 <div className="text-slate-400 font-medium bg-slate-50 p-8 rounded-full h-full w-full flex items-center justify-center border border-slate-100">No Data Available</div>
+               )}
+            </div>
+          </div>
+
+      </div>
+    );
+  };
+
+  const renderBOQCalculator = () => {
+    const canEdit = hasPerm('edit_boq');
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        {!canEdit && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-4 rounded-2xl flex items-center shadow-sm">
+            <Lock size={20} className="mr-4 text-amber-600"/>
+            <div>
+              <p className="font-black text-sm">View-Only Access Enforced</p>
+              <p className="text-sm mt-0.5 font-medium">Your role ({currentUser.role}) does not have privileges to edit Estimation & BOQ Standard Rates.</p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row md:justify-between md:items-end space-y-4 md:space-y-0">
+          <div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Estimation & BOQ Engine</h2>
+            <p className="text-slate-500 font-medium mt-1">Real-time cost calculation and resource allocation.</p>
+          </div>
+          <div className="flex items-center space-x-3">
+             <button className="bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-50 hover:text-indigo-600 transition-all flex items-center shadow-sm">
+                <FileText size={16} className="mr-2"/> Export PDF
+             </button>
+             <button className="bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-50 hover:text-emerald-600 transition-all flex items-center shadow-sm">
+                <Download size={16} className="mr-2"/> Export CSV
+             </button>
+          </div>
+        </div>
+
+        {/* Revenue Input Box */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between">
+           <div className="flex items-center space-x-4">
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Banknote size={20}/></div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-0.5">Target Estimated Revenue</p>
+                <div className="flex items-center">
+                  <span className="text-slate-400 mr-2 font-black text-xl">Rp</span>
+                  <input 
+                    type="number" 
+                    value={estimatedRevenue}
+                    onChange={(e) => setEstimatedRevenue(Number(e.target.value))}
+                    disabled={!canEdit}
+                    className={`w-48 outline-none font-black text-2xl bg-transparent border-b-2 transition-colors ${canEdit ? 'text-slate-900 border-indigo-200 focus:border-indigo-600 hover:border-indigo-400' : 'text-slate-500 border-transparent'}`}
+                  />
+                </div>
+              </div>
+           </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10 border border-slate-800">
+          <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Materials</p><p className="text-base lg:text-xl font-black">{formatCompactIDR(boqCalculations.totalMaterial)}</p></div>
+          <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Labor</p><p className="text-base lg:text-xl font-black">{formatCompactIDR(boqCalculations.totalLabor)}</p></div>
+          <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Equipment</p><p className="text-base lg:text-xl font-black">{formatCompactIDR(boqCalculations.totalEquipment)}</p></div>
+          <div className="pl-4 border-l border-slate-700"><p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">Total Est. Cost</p><p className="text-lg lg:text-2xl font-black text-indigo-400">{formatCompactIDR(boqCalculations.totalCost)}</p></div>
+          <div className="pl-4 border-l border-slate-700"><p className="text-xs text-emerald-300 font-bold uppercase tracking-wider mb-1">Forecast Margin</p><p className="text-lg lg:text-2xl font-black text-emerald-400">{boqCalculations.profitMargin}%</p></div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-4 px-6 font-bold text-xs uppercase tracking-wider text-slate-500">Resource Name</th>
+                  <th className="p-4 font-bold text-xs uppercase tracking-wider text-slate-500">Type</th>
+                  <th className="p-4 font-bold text-xs uppercase tracking-wider text-slate-500">Quantity</th>
+                  <th className="p-4 font-bold text-xs uppercase tracking-wider text-slate-500">Unit</th>
+                  <th className="p-4 font-bold text-xs uppercase tracking-wider text-slate-500">Unit Cost (IDR)</th>
+                  <th className="p-4 px-6 font-bold text-xs uppercase tracking-wider text-slate-500 text-right">Total Cost</th>
+                  {canEdit && <th className="p-4 font-bold text-xs uppercase tracking-wider text-slate-500 text-center">Action</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {boqItems.map((item) => (
+                  <tr key={item.id} className="hover:bg-indigo-50/40 transition-colors group">
+                    <td className="p-4 px-6">
+                      <input type="text" value={item.name} disabled={!canEdit} onChange={(e) => handleUpdateBoqItem(item.id, 'name', e.target.value)} className={`w-full bg-transparent outline-none font-bold border-b border-transparent ${canEdit ? 'text-slate-800 focus:border-indigo-500 hover:border-indigo-200 py-1' : 'text-slate-600'}`} />
+                    </td>
+                    <td className="p-4">
+                      <select value={item.type} disabled={!canEdit} onChange={(e) => handleUpdateBoqItem(item.id, 'type', e.target.value)} className={`bg-transparent outline-none font-semibold border-b border-transparent ${canEdit ? 'text-slate-600 focus:border-indigo-500 hover:border-indigo-200 py-1 cursor-pointer' : 'text-slate-500 appearance-none'}`}>
+                        <option value="Material">Material</option>
+                        <option value="Labor">Labor</option>
+                        <option value="Equipment">Equipment</option>
+                      </select>
+                    </td>
+                    <td className="p-4">
+                      <input type="number" value={item.quantity} disabled={!canEdit} onChange={(e) => handleUpdateBoqItem(item.id, 'quantity', Number(e.target.value))} className={`w-24 bg-transparent outline-none font-semibold border-b border-transparent ${canEdit ? 'text-slate-800 focus:border-indigo-500 hover:border-indigo-200 py-1' : 'text-slate-600'}`} />
+                    </td>
+                    <td className="p-4">
+                       <input type="text" value={item.unit} disabled={!canEdit} onChange={(e) => handleUpdateBoqItem(item.id, 'unit', e.target.value)} className={`w-16 bg-transparent outline-none font-semibold border-b border-transparent ${canEdit ? 'text-slate-600 focus:border-indigo-500 hover:border-indigo-200 py-1' : 'text-slate-500'}`} />
+                    </td>
+                    <td className="p-4">
+                      <input type="number" value={item.unitCost} disabled={!canEdit} onChange={(e) => handleUpdateBoqItem(item.id, 'unitCost', Number(e.target.value))} className={`w-32 bg-transparent outline-none font-semibold border-b border-transparent ${canEdit ? 'text-slate-800 focus:border-indigo-500 hover:border-indigo-200 py-1' : 'text-slate-600'}`} />
+                    </td>
+                    <td className="p-4 px-6 text-right font-black text-slate-700">
+                      {formatIDR(item.quantity * item.unitCost)}
+                    </td>
+                    {canEdit && (
+                      <td className="p-4 text-center">
+                        <button onClick={() => handleRemoveBoqItem(item.id)} className="text-slate-300 hover:text-rose-600 transition-colors p-2 rounded-lg hover:bg-rose-100"><Trash2 size={18} /></button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {canEdit && (
+            <div className="p-4 px-6 bg-slate-50 border-t border-slate-200">
+              <button onClick={handleAddBoqItem} className="flex items-center text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors py-2 px-3 rounded-lg hover:bg-indigo-100/50">
+                <Plus size={18} className="mr-2" /> Add New Resource Row
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderProjects = () => {
+    const canEdit = hasPerm('edit_projects');
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex justify-between items-center">
+          <div>
+             <h2 className="text-3xl font-black text-slate-800 tracking-tight">Project Directory</h2>
+             <p className="text-slate-500 font-medium mt-1">
+               {searchQuery ? `Searching for "${searchQuery}"` : 'Select a project card to view full details and manage phases.'}
+             </p>
+          </div>
+          {canEdit ? (
+            <button 
+              onClick={() => setIsAddingProject(true)}
+              className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl shadow-sm text-sm font-bold hover:bg-indigo-700 hover:shadow transition-all flex items-center">
+               <Plus size={18} className="mr-2" /> New Project
+            </button>
+          ) : (
+            <button disabled className="bg-slate-100 text-slate-400 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center cursor-not-allowed">
+               <Lock size={16} className="mr-2" /> New Project
+            </button>
+          )}
+        </div>
+
+        {filteredProjects.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-200 border-dashed p-16 flex flex-col items-center justify-center text-center">
+             <div className="bg-slate-50 p-4 rounded-full mb-4">
+               <SearchX size={48} className="text-slate-300"/>
+             </div>
+             <h3 className="text-xl font-black text-slate-800 mb-2">No projects found</h3>
+             <p className="text-slate-500 font-medium max-w-sm">We couldn't find any projects matching "{searchQuery}". Try adjusting your search terms.</p>
+             <button onClick={() => setSearchQuery('')} className="mt-6 text-indigo-600 font-bold hover:text-indigo-800 transition-colors">Clear Search</button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProjects.map(project => {
+              const health = getProjectHealth(project);
+              const healthColors = {
+                'On Track': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                'At Risk': 'bg-amber-50 text-amber-700 border-amber-200',
+                'Critical': 'bg-rose-50 text-rose-700 border-rose-200'
+              };
+              const HealthIcon = health === 'On Track' ? ShieldCheck : health === 'At Risk' ? Activity : ShieldAlert;
+
+              return (
+               <div 
+                 key={project.id} 
+                 onClick={() => handleProjectClick(project.id)}
+                 className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 cursor-pointer hover:border-indigo-400 hover:shadow-lg transition-all group relative flex flex-col h-full"
+                >
+                  <div className="absolute top-6 right-6">
+                     <span className={`flex items-center text-xs px-2.5 py-1 rounded-md font-bold border ${healthColors[health]}`}>
+                        <HealthIcon size={12} className="mr-1.5"/> {health}
+                     </span>
+                  </div>
+                  <div className="pr-24 mb-6">
+                    <h3 className="font-black text-xl text-slate-800 leading-tight group-hover:text-indigo-700 transition-colors line-clamp-2">{project.name}</h3>
+                    <p className="text-sm font-bold text-slate-400 mt-1 flex items-center"><MapPin size={14} className="mr-1"/> {project.location}</p>
+                  </div>
+                  
+                  <div className="space-y-5 mt-auto">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-slate-500 font-bold">Overall Progress</span>
+                        <span className="font-black text-slate-800">{project.completion}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                        <div className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${project.completion}%` }}></div>
+                      </div>
+                    </div>
+
+                    <div className="pt-5 border-t border-slate-100 flex justify-between">
+                      <div>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-0.5">Budget</p>
+                        <p className="font-black text-slate-800">{formatCompactIDR(project.budget)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-0.5">Spent</p>
+                        <p className={`font-black ${project.spent > project.budget ? 'text-rose-600' : 'text-slate-800'}`}>
+                          {formatCompactIDR(project.spent)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+               </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ADD NEW PROJECT MODAL */}
+        {isAddingProject && canEdit && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-slate-800">Initialize Project</h3>
+                <button onClick={() => setIsAddingProject(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full transition-colors"><X size={20}/></button>
+              </div>
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Project Name</label>
+                  <input type="text" value={newProjectData.name} onChange={e => setNewProjectData({...newProjectData, name: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-500 focus:ring-2 ring-indigo-100 font-bold text-slate-800" placeholder="E.g. Menara Jakarta"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Project Manager</label>
+                  <input type="text" value={newProjectData.manager} onChange={e => setNewProjectData({...newProjectData, manager: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-500 focus:ring-2 ring-indigo-100 font-bold text-slate-800" placeholder="Name of Manager"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Location</label>
+                  <input type="text" value={newProjectData.location} onChange={e => setNewProjectData({...newProjectData, location: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-500 focus:ring-2 ring-indigo-100 font-bold text-slate-800" placeholder="City, Region"/>
+                </div>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Due Date</label>
+                    <input type="date" value={newProjectData.dueDate} onChange={e => setNewProjectData({...newProjectData, dueDate: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-500 focus:ring-2 ring-indigo-100 font-bold text-slate-800"/>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Budget (IDR)</label>
+                    <input type="number" value={newProjectData.budget} onChange={e => setNewProjectData({...newProjectData, budget: e.target.value})} className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-indigo-500 focus:ring-2 ring-indigo-100 font-bold text-slate-800" placeholder="0"/>
+                  </div>
+                </div>
+                <button onClick={handleAddNewProject} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl mt-6 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-lg">
+                  Create Project
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderProjectDetails = () => {
+    const project = isEditingProject ? editingProjectData : projects.find(p => p.id === selectedProjectId);
+    if (!project) return <div>Project not found</div>;
+
+    const remainingBudget = project.budget - project.spent;
+    const isOverBudget = remainingBudget < 0;
+    const health = getProjectHealth(project);
+    const healthColors = {
+      'On Track': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      'At Risk': 'bg-amber-50 text-amber-700 border-amber-200',
+      'Critical': 'bg-rose-50 text-rose-700 border-rose-200'
+    };
+    const HealthIcon = health === 'On Track' ? ShieldCheck : health === 'At Risk' ? Activity : ShieldAlert;
+    const canEdit = hasPerm('edit_projects');
+
+    return (
+      <div className="space-y-6 animate-in slide-in-from-right-8 duration-300">
+        {!canEdit && !isEditingProject && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-4 rounded-2xl flex items-center shadow-sm">
+            <Lock size={20} className="mr-4 text-amber-600"/>
+            <div>
+              <p className="font-black text-sm">View-Only Access</p>
+              <p className="text-sm mt-0.5 font-medium">Your role ({currentUser.role}) does not have privileges to edit project configurations or phases.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Detail Header & Back Button */}
+        <div className="flex items-center justify-between pb-6 border-b border-slate-200">
+          <div>
+            <button 
+              onClick={() => { setIsEditingProject(false); setActiveTab('projects'); }}
+              className="flex items-center text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors mb-3"
+            >
+              <ArrowLeft size={16} className="mr-1"/> Back to Directory
+            </button>
+            <div className="flex items-center space-x-4">
+              {isEditingProject && canEdit ? (
+                <input 
+                  type="text" 
+                  value={project.name} 
+                  onChange={(e) => setEditingProjectData({...project, name: e.target.value})}
+                  className="text-4xl font-black text-slate-800 bg-white border-2 border-indigo-300 rounded-lg px-3 py-1 outline-none focus:border-indigo-600 w-full max-w-lg"
+                />
+              ) : (
+                <h2 className="text-4xl font-black text-slate-900 tracking-tight">{project.name}</h2>
+              )}
+              
+              {!isEditingProject && (
+                <span className={`flex items-center text-sm px-3 py-1.5 rounded-lg font-bold border ${healthColors[health]}`}>
+                    <HealthIcon size={16} className="mr-2"/> {health}
+                </span>
+              )}
+            </div>
+          </div>
+          <div>
+            {isEditingProject && canEdit ? (
+              <div className="flex space-x-3">
+                 <button onClick={() => setIsEditingProject(false)} className="bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={saveProjectDetails} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center shadow-md shadow-indigo-200">
+                  <Save size={18} className="mr-2"/> Save Changes
+                </button>
+              </div>
+            ) : canEdit ? (
+              <button onClick={() => startEditingProject(project)} className="bg-white border-2 border-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:border-indigo-300 hover:text-indigo-600 transition-colors flex items-center">
+                <Edit2 size={16} className="mr-2"/> Edit Configuration
+              </button>
+            ) : (
+              <button disabled className="bg-slate-50 border border-slate-200 text-slate-400 px-5 py-2.5 rounded-xl text-sm font-bold flex items-center cursor-not-allowed">
+                <Lock size={16} className="mr-2"/> Locked
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Project Meta Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 col-span-1 md:col-span-2 lg:col-span-1">
+             <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><User size={24} /></div>
+             <div className="flex-1">
+               <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-0.5">Project Manager</p>
+               {isEditingProject ? (
+                  <input type="text" value={project.manager} onChange={(e) => setEditingProjectData({...project, manager: e.target.value})} className="w-full border-b-2 border-indigo-300 outline-none focus:border-indigo-600 font-black text-lg text-slate-800 py-1"/>
+               ) : (
+                  <p className="font-black text-lg text-slate-800">{project.manager}</p>
+               )}
+             </div>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 col-span-1 md:col-span-2 lg:col-span-1">
+             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><MapPin size={24} /></div>
+             <div className="flex-1">
+               <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-0.5">Location</p>
+               {isEditingProject ? (
+                  <input type="text" value={project.location} onChange={(e) => setEditingProjectData({...project, location: e.target.value})} className="w-full border-b-2 border-indigo-300 outline-none focus:border-indigo-600 font-black text-lg text-slate-800 py-1"/>
+               ) : (
+                  <p className="font-black text-lg text-slate-800">{project.location}</p>
+               )}
+             </div>
+          </div>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4 col-span-1 md:col-span-2 lg:col-span-1">
+             <div className="p-3 bg-amber-50 text-amber-600 rounded-xl"><Calendar size={24} /></div>
+             <div className="flex-1">
+               <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-0.5">Est. Completion</p>
+               {isEditingProject ? (
+                  <input type="date" value={project.dueDate} onChange={(e) => setEditingProjectData({...project, dueDate: e.target.value})} className="w-full border-b-2 border-indigo-300 outline-none focus:border-indigo-600 font-black text-lg text-slate-800 py-1"/>
+               ) : (
+                 <p className="font-black text-lg text-slate-800">{project.dueDate}</p>
+               )}
+             </div>
+          </div>
+
+          {/* Assigned Team module */}
+          <div className="bg-slate-900 p-5 rounded-2xl shadow-lg border border-slate-800 flex flex-col justify-center col-span-1 md:col-span-2 lg:col-span-1">
+            <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-2">Assigned Core Team</p>
+            <div className="flex items-center">
+              {project.team && project.team.length > 0 ? (
+                <div className="flex -space-x-3">
+                  {project.team.map((member, idx) => (
+                    <div key={idx} className={`w-10 h-10 rounded-full bg-gradient-to-br ${member.color} text-white flex items-center justify-center font-bold text-sm shadow-md ring-2 ring-slate-900`} title={`${member.name} - ${member.role}`}>
+                      {member.initials}
+                    </div>
+                  ))}
+                  {isEditingProject && (
+                    <button className="w-10 h-10 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center hover:bg-slate-700 ring-2 ring-slate-900 transition-colors" title="Add Team Member">
+                      <Plus size={16}/>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm font-medium text-slate-400">No team assigned</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Financial Overview inside details */}
+          <div className="col-span-1 lg:col-span-1 bg-white p-8 rounded-2xl shadow-sm border border-slate-200 h-fit">
+            <h3 className="text-xl font-black text-slate-800 mb-6">Financial Overview</h3>
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Total Approved Budget (IDR)</p>
+                {isEditingProject ? (
+                  <input type="number" value={project.budget} onChange={(e) => setEditingProjectData({...project, budget: Number(e.target.value)})} className="w-full text-2xl font-black text-slate-800 border-b-2 border-indigo-300 outline-none focus:border-indigo-600 py-1"/>
+                ) : (
+                  <p className="text-2xl font-black text-slate-800">{formatIDR(project.budget)}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Current Spend (IDR)</p>
+                {isEditingProject ? (
+                  <input type="number" value={project.spent} onChange={(e) => setEditingProjectData({...project, spent: Number(e.target.value)})} className="w-full text-2xl font-black text-indigo-600 border-b-2 border-indigo-300 outline-none focus:border-indigo-600 py-1"/>
+                ) : (
+                  <p className="text-2xl font-black text-indigo-600">{formatIDR(project.spent)}</p>
+                )}
+              </div>
+              <div className="pt-6 border-t border-slate-100">
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Remaining Budget</p>
+                <p className={`text-2xl font-black ${isOverBudget ? 'text-rose-500' : 'text-emerald-600'}`}>
+                  {isOverBudget ? '-' : ''}{formatIDR(Math.abs(remainingBudget))}
+                </p>
+                {isOverBudget && <p className="text-sm font-bold text-rose-500 mt-3 flex items-center bg-rose-50 p-2.5 rounded-xl border border-rose-100"><AlertCircle size={16} className="mr-2"/> Budget Exceeded</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Phase Tracking */}
+          <div className="col-span-1 lg:col-span-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-800">Construction Phases</h3>
+              {isEditingProject && (
+                <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">Update progress via sliders</span>
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              {project.phases.map(phase => (
+                <div key={phase.id} className="p-5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <div className="flex justify-between items-center mb-3">
+                    {isEditingProject ? (
+                      <input 
+                        type="text" 
+                        value={phase.name} 
+                        onChange={(e) => {
+                          const updatedPhases = project.phases.map(p => p.id === phase.id ? {...p, name: e.target.value} : p);
+                          setEditingProjectData({...project, phases: updatedPhases});
+                        }}
+                        className="font-bold text-lg text-slate-800 bg-white border-2 border-slate-200 rounded-lg px-3 py-1 outline-none focus:border-indigo-500 w-1/2"
+                      />
+                    ) : (
+                      <span className="font-bold text-lg text-slate-800">{phase.name}</span>
+                    )}
+                    
+                    <span className={`text-xs px-3 py-1.5 rounded-lg font-bold ${
+                      phase.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
+                      phase.status === 'In Progress' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {phase.status}
+                    </span>
+                  </div>
+                  
+                  {isEditingProject ? (
+                    <div className="flex items-center space-x-4 mt-4 bg-white p-3 rounded-lg border border-slate-100">
+                      <input 
+                        type="range" 
+                        min="0" max="100" 
+                        value={phase.progress} 
+                        onChange={(e) => handlePhaseProgressChange(phase.id, e.target.value)}
+                        className="flex-1 accent-indigo-600 cursor-pointer h-2 bg-slate-200 rounded-lg appearance-none"
+                      />
+                      <span className="text-lg font-black text-slate-700 w-12 text-right">{phase.progress}%</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-4 mt-2">
+                      <div className="flex-1 bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                        <div 
+                          className={`h-2.5 rounded-full transition-all duration-500 ${phase.progress === 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} 
+                          style={{ width: `${phase.progress}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-black text-slate-600 w-10 text-right">{phase.progress}%</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {isEditingProject && (
+                <button 
+                  onClick={() => {
+                    const newPhase = { id: Date.now(), name: 'New Phase', status: 'Pending', progress: 0 };
+                    setEditingProjectData({...project, phases: [...project.phases, newPhase]});
+                  }}
+                  className="w-full border-2 border-dashed border-slate-300 text-slate-500 hover:border-indigo-400 hover:text-indigo-600 py-4 rounded-xl font-bold transition-colors flex items-center justify-center bg-slate-50 hover:bg-indigo-50/50"
+                >
+                  <Plus size={20} className="mr-2"/> Add New Construction Phase
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAccessManagement = () => (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div>
+         <h2 className="text-3xl font-black text-slate-800 tracking-tight">Access Management</h2>
+         <p className="text-slate-500 font-medium mt-1">Review team roles and system privileges.</p>
+      </div>
+      
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="p-5 px-8 font-bold text-xs uppercase tracking-wider text-slate-500">User / Personnel</th>
+              <th className="p-5 font-bold text-xs uppercase tracking-wider text-slate-500">Assigned Role</th>
+              <th className="p-5 font-bold text-xs uppercase tracking-wider text-slate-500">System Privileges</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {USERS.map((user) => (
+              <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                <td className="p-5 px-8">
+                   <div className="flex items-center space-x-4">
+                     <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${user.color} text-white flex items-center justify-center font-black text-base shadow-sm ring-2 ring-white`}>
+                       {user.initials}
+                     </div>
+                     <div>
+                       <span className="font-bold text-slate-800 block text-lg">{user.name}</span>
+                       <span className="text-xs font-semibold text-slate-400">ID: {user.id.toUpperCase()}</span>
+                     </div>
+                   </div>
+                </td>
+                <td className="p-5">
+                  <span className="font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 inline-block">
+                    {user.role}
+                  </span>
+                </td>
+                <td className="p-5">
+                  <div className="flex flex-wrap gap-2">
+                    {PERMISSIONS[user.role].length === 0 && <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">Read-Only</span>}
+                    {PERMISSIONS[user.role].includes('edit_company') && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg flex items-center shadow-sm"><Unlock size={12} className="mr-1.5"/> Company Budget</span>}
+                    {PERMISSIONS[user.role].includes('edit_projects') && <span className="text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg flex items-center shadow-sm"><Unlock size={12} className="mr-1.5"/> Manage Projects</span>}
+                    {PERMISSIONS[user.role].includes('edit_boq') && <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg flex items-center shadow-sm"><Unlock size={12} className="mr-1.5"/> Edit BOQ Rates</span>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+
+  // --- MAIN LAYOUT WITH ENTERPRISE HEADER & PAM SWITCHER ---
+  return (
+    <div className="flex h-screen bg-slate-50/50 font-sans overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      {/* Sidebar */}
+      <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col shrink-0 transition-all border-r border-slate-800 relative z-30">
+        <div className="p-8 flex items-center space-x-4 text-white">
+          <div className="bg-gradient-to-br from-indigo-500 to-blue-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/30">
+            <HardHat size={28} className="text-white" />
+          </div>
+          <span className="text-2xl font-black tracking-tight">BuildBase OS</span>
+        </div>
+        
+        <nav className="flex-1 px-5 py-6 space-y-2">
+          <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Core Modules</p>
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-900/50 border border-indigo-500/50' : 'hover:bg-slate-800 hover:text-white font-medium'}`}
+          >
+            <LayoutDashboard size={20} />
+            <span className={activeTab === 'dashboard' ? 'font-bold' : ''}>Executive Dashboard</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('calculator')}
+            className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all ${activeTab === 'calculator' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-900/50 border border-indigo-500/50' : 'hover:bg-slate-800 hover:text-white font-medium'}`}
+          >
+            <Calculator size={20} />
+            <span className={activeTab === 'calculator' ? 'font-bold' : ''}>Estimation & BOQ</span>
+          </button>
+          <button 
+            onClick={() => { setActiveTab('projects'); setIsEditingProject(false); setSearchQuery(''); }}
+            className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all ${(activeTab === 'projects' || activeTab === 'project-details') ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-900/50 border border-indigo-500/50' : 'hover:bg-slate-800 hover:text-white font-medium'}`}
+          >
+            <FolderKanban size={20} />
+            <span className={(activeTab === 'projects' || activeTab === 'project-details') ? 'font-bold' : ''}>Project Portfolio</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('team')}
+            className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-xl transition-all ${activeTab === 'team' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-900/50 border border-indigo-500/50' : 'hover:bg-slate-800 hover:text-white font-medium'}`}
+          >
+            <UsersIcon size={20} />
+            <span className={activeTab === 'team' ? 'font-bold' : ''}>Team & Access</span>
+          </button>
+        </nav>
+
+        <div className="p-6 border-t border-slate-800">
+           <div className="bg-slate-800/50 rounded-xl p-4 mb-4 flex items-start space-x-3 border border-slate-700 shadow-inner">
+             <Shield size={20} className="text-emerald-400 shrink-0 mt-0.5"/>
+             <div>
+               <p className="text-xs font-bold text-white">Secure Session</p>
+               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">Role-based access controls are actively enforced for {currentUser.name}.</p>
+             </div>
+           </div>
+           <button className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors font-bold text-sm border border-slate-700">
+            <Settings size={16} />
+            <span>Preferences</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Global Header */}
+        <header className="bg-white border-b border-slate-200 h-20 flex items-center justify-between px-10 shrink-0 z-20 shadow-sm relative">
+           
+           {/* Global Intelligent Search */}
+           <div className="flex items-center text-slate-400 bg-slate-100/80 px-4 py-2.5 rounded-xl w-[400px] focus-within:bg-white focus-within:ring-2 ring-indigo-500/20 focus-within:border-indigo-300 border border-transparent transition-all shadow-inner">
+             <Search size={18} className="mr-3 text-slate-500"/>
+             <input 
+               type="text" 
+               placeholder="Search projects by name, location, or manager..." 
+               value={searchQuery}
+               onChange={handleSearchInput}
+               className="bg-transparent outline-none w-full text-sm font-bold text-slate-800 placeholder-slate-400"
+             />
+             {searchQuery && (
+               <button onClick={() => setSearchQuery('')} className="ml-2 text-slate-400 hover:text-slate-600">
+                 <X size={16}/>
+               </button>
+             )}
+           </div>
+           
+           <div className="flex items-center space-x-6 relative">
+             <button className="relative p-2.5 text-slate-500 hover:text-indigo-600 transition-colors bg-slate-50 hover:bg-indigo-50 rounded-full border border-slate-100">
+               <Bell size={20}/>
+               <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full"></span>
+             </button>
+             <div className="h-8 w-px bg-slate-200"></div>
+             
+             {/* SIMULATED AUTH SWITCHER */}
+             <div className="relative">
+               <div 
+                 onClick={() => setShowUserMenu(!showUserMenu)}
+                 className="flex items-center space-x-3 cursor-pointer group p-1.5 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                 <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${currentUser.color} text-white flex items-center justify-center font-black text-sm shadow-md ring-2 ring-white`}>
+                   {currentUser.initials}
+                 </div>
+                 <div className="flex flex-col pr-2">
+                   <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{currentUser.name}</span>
+                   <span className="text-xs font-semibold text-slate-500 flex items-center"><Lock size={10} className="mr-1"/> {currentUser.role}</span>
+                 </div>
+                 <ChevronDown size={16} className={`text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}/>
+               </div>
+
+               {/* Dropdown Menu */}
+               {showUserMenu && (
+                 <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-top-2 z-50">
+                   <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Simulate Role Switch</p>
+                     <Shield size={14} className="text-indigo-400"/>
+                   </div>
+                   <div className="p-2 space-y-1">
+                     {USERS.map(user => (
+                       <button 
+                         key={user.id}
+                         onClick={() => setCurrentUser(user)}
+                         className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left transition-colors ${currentUser.id === user.id ? 'bg-indigo-50/80' : 'hover:bg-slate-50'}`}
+                       >
+                         <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${user.color} text-white flex items-center justify-center font-bold text-xs shadow-sm`}>
+                           {user.initials}
+                         </div>
+                         <div>
+                           <p className={`text-sm font-bold ${currentUser.id === user.id ? 'text-indigo-700' : 'text-slate-700'}`}>{user.name}</p>
+                           <p className="text-xs font-semibold text-slate-400">{user.role}</p>
+                         </div>
+                         {currentUser.id === user.id && <CheckCircle2 size={18} className="text-indigo-600 ml-auto"/>}
+                       </button>
+                     ))}
+                   </div>
+                   <div className="p-3 bg-slate-50 border-t border-slate-100">
+                      <button className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-rose-600 hover:bg-rose-100 font-bold text-sm transition-colors border border-transparent hover:border-rose-200">
+                        <LogOut size={16}/> <span>Sign Out</span>
+                      </button>
+                   </div>
+                 </div>
+               )}
+             </div>
+           </div>
+        </header>
+
+        {/* Scrollable Canvas */}
+        <main className="flex-1 overflow-y-auto p-10 relative bg-slate-50/50 pb-20">
+          <div className="max-w-[1400px] mx-auto">
+            {activeTab === 'dashboard' && renderDashboard()}
+            {activeTab === 'calculator' && renderBOQCalculator()}
+            {activeTab === 'projects' && renderProjects()}
+            {activeTab === 'project-details' && renderProjectDetails()}
+            {activeTab === 'team' && renderAccessManagement()}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
