@@ -2,18 +2,23 @@
 <html lang="id" class="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
   <title>Construction Hub - Enterprise Site & Financial Platform</title>
 
   <!-- PWA & SEO Meta Tags -->
   <meta name="description" content="Platform Manajemen Proyek & Keuangan Konstruksi Real-time untuk Mobile dan Desktop." />
-  <meta name="theme-color" content="#2563eb" />
+  <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ConstructionHub" />
   <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3063/3063823.png" />
   <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3063/3063823.png" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -22,16 +27,61 @@
       darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
+          },
           colors: {
             brand: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              500: '#3b82f6',
-              600: '#2563eb',
-              700: '#1d4ed8',
-              900: '#1e3a8a',
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+              300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1',
+              600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81',
             }
-          }
+          },
+          animation: {
+            'float': 'float 6s ease-in-out infinite',
+            'glow': 'glow 2s ease-in-out infinite alternate',
+            'slide-up': 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+            'slide-down': 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            'fade-in': 'fadeIn 0.4s ease-out',
+            'scale-in': 'scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            'shimmer': 'shimmer 2s linear infinite',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'count-up': 'countUp 0.8s ease-out',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-10px)' },
+            },
+            glow: {
+              'from': { boxShadow: '0 0 10px rgba(99, 102, 241, 0.3)' },
+              'to': { boxShadow: '0 0 25px rgba(99, 102, 241, 0.6)' },
+            },
+            slideUp: {
+              'from': { opacity: '0', transform: 'translateY(20px)' },
+              'to': { opacity: '1', transform: 'translateY(0)' },
+            },
+            slideDown: {
+              'from': { opacity: '0', transform: 'translateY(-10px)' },
+              'to': { opacity: '1', transform: 'translateY(0)' },
+            },
+            fadeIn: {
+              'from': { opacity: '0' },
+              'to': { opacity: '1' },
+            },
+            scaleIn: {
+              'from': { opacity: '0', transform: 'scale(0.95)' },
+              'to': { opacity: '1', transform: 'scale(1)' },
+            },
+            shimmer: {
+              '0%': { backgroundPosition: '-200% 0' },
+              '100%': { backgroundPosition: '200% 0' },
+            },
+            countUp: {
+              'from': { opacity: '0', transform: 'translateY(10px)' },
+              'to': { opacity: '1', transform: 'translateY(0)' },
+            },
+          },
         }
       }
     }
@@ -43,15 +93,24 @@
   <!-- Custom Stylesheet -->
   <link rel="stylesheet" href="./style.css" />
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300">
+<body class="font-sans bg-slate-50 dark:bg-[#080c14] text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-500">
 
   <!-- Root App Container -->
   <div id="app-root" class="min-h-screen flex flex-col">
-    <!-- Fallback / Loading Shell -->
-    <div id="loading-spinner" class="fixed inset-0 bg-slate-900 text-white flex flex-col items-center justify-center z-50 transition-opacity duration-300">
-      <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <h1 class="text-xl font-bold tracking-wider">CONSTRUCTION HUB</h1>
-      <p class="text-xs text-slate-400 mt-1">Memuat Platform Management & PWA Engine...</p>
+    <!-- Premium Loading Shell -->
+    <div id="loading-spinner" class="fixed inset-0 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col items-center justify-center z-[100] transition-opacity duration-500">
+      <div class="relative">
+        <div class="w-20 h-20 border-[3px] border-indigo-500/30 rounded-full absolute inset-0 animate-ping"></div>
+        <div class="w-20 h-20 border-[3px] border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+        </div>
+      </div>
+      <h1 class="text-xl font-black tracking-[0.3em] uppercase mt-6 bg-gradient-to-r from-indigo-300 via-white to-indigo-300 bg-clip-text text-transparent">Construction Hub</h1>
+      <p class="text-[11px] text-indigo-300/70 mt-2 tracking-widest uppercase">Enterprise Management Platform</p>
+      <div class="mt-6 w-48 h-1 bg-slate-800 rounded-full overflow-hidden">
+        <div class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-full animate-shimmer" style="background-size: 200% 100%; width: 100%"></div>
+      </div>
     </div>
   </div>
 
@@ -63,8 +122,8 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('PWA ServiceWorker registered with scope:', reg.scope))
-          .catch(err => console.log('ServiceWorker registration failed:', err));
+          .then(reg => console.log('PWA ServiceWorker registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
       });
     }
   </script>

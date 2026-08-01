@@ -1,1315 +1,1173 @@
 /**
- * Construction Hub - Enterprise Site & Financial Management Engine
- * Mobile & Desktop Responsive PWA Application
+ * Construction Hub v3.0 - Enterprise Site & Financial Management
+ * Premium PWA with full-featured construction management
  */
-
 (function () {
-  // --- INITIAL DATA & SEED STATE ---
-  const DEFAULT_USERS = [
+  'use strict';
+
+  // ==============================
+  // DATA LAYER & DEFAULTS
+  // ==============================
+  const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
     { id: 'u2', name: 'Sarah Jenkins', role: 'Project Manager', initials: 'SJ', color: 'bg-emerald-600', email: 'sarah.j@constructionhub.co.id' },
     { id: 'u3', name: 'Mike Ross', role: 'Chief Estimator', initials: 'MR', color: 'bg-amber-600', email: 'mike.r@constructionhub.co.id' },
     { id: 'u4', name: 'PT Megah Utama', role: 'Stakeholder', initials: 'MU', color: 'bg-slate-600', email: 'client@megahutama.com' }
   ];
 
-  const PERMISSIONS = {
+  const PERMS = {
     'CEO / Admin': ['edit_company', 'edit_projects', 'edit_boq', 'manage_users', 'export_data', 'add_sitelog'],
     'Project Manager': ['edit_projects', 'add_sitelog', 'export_data'],
     'Chief Estimator': ['edit_boq', 'export_data'],
-    'Stakeholder': [] // Read-Only
+    'Stakeholder': []
   };
 
   const DEFAULT_PROJECTS = [
     {
-      id: 1,
-      name: 'Skyline Tower Alpha',
-      status: 'In Progress',
-      budget: 25500000000,
-      spent: 14200000000,
-      completion: 65,
-      manager: 'Sarah Jenkins',
-      location: 'SCBD, Jakarta Selatan',
-      dueDate: '2026-11-15',
-      weather: { condition: 'Cerah', temp: 32, rainRisk: 'Rendah', alert: 'Aman untuk pengecoran' },
+      id: 1, name: 'Skyline Tower Alpha', status: 'In Progress', budget: 25500000000, spent: 14200000000, completion: 65,
+      manager: 'Sarah Jenkins', location: 'SCBD, Jakarta Selatan', dueDate: '2026-11-15',
+      weather: { condition: 'Cerah Berawan', temp: 32, rainRisk: 'Rendah', icon: 'sun', alert: null },
+      cashflow: [
+        { month: 'Jan', budgeted: 2000000000, actual: 1800000000 },
+        { month: 'Feb', budgeted: 2500000000, actual: 2300000000 },
+        { month: 'Mar', budgeted: 3000000000, actual: 3200000000 },
+        { month: 'Apr', budgeted: 2800000000, actual: 2750000000 },
+        { month: 'Mei', budgeted: 3200000000, actual: 2100000000 },
+        { month: 'Jun', budgeted: 2500000000, actual: 2050000000 },
+      ],
       phases: [
-        { id: 101, name: 'Persiapan Lahan & Excavation', status: 'Completed', progress: 100, startDate: '2026-01-10', endDate: '2026-03-01' },
-        { id: 102, name: 'Pekerjaan Fondasi & Substructure', status: 'Completed', progress: 100, startDate: '2026-03-02', endDate: '2026-06-15' },
-        { id: 103, name: 'Struktur Atas & Framing Steel', status: 'In Progress', progress: 55, startDate: '2026-06-16', endDate: '2026-09-30' },
-        { id: 104, name: 'Instalasi MEP (Mechanical/Electrical)', status: 'Pending', progress: 0, startDate: '2026-09-01', endDate: '2026-11-01' },
-        { id: 105, name: 'Finishing Interior & Architectural', status: 'Pending', progress: 0, startDate: '2026-10-01', endDate: '2026-11-15' }
+        { id: 101, name: 'Persiapan Lahan & Excavation', status: 'Completed', progress: 100, start: '2026-01-10', end: '2026-03-01' },
+        { id: 102, name: 'Pekerjaan Fondasi & Substructure', status: 'Completed', progress: 100, start: '2026-03-02', end: '2026-06-15' },
+        { id: 103, name: 'Struktur Atas & Steel Framing', status: 'In Progress', progress: 55, start: '2026-06-16', end: '2026-09-30' },
+        { id: 104, name: 'Instalasi MEP (M/E/P)', status: 'In Progress', progress: 15, start: '2026-09-01', end: '2026-11-01' },
+        { id: 105, name: 'Finishing Interior & Arsitektural', status: 'Pending', progress: 0, start: '2026-10-01', end: '2026-11-15' }
       ]
     },
     {
-      id: 2,
-      name: 'Harbor Retail & Resort Complex',
-      status: 'In Progress',
-      budget: 18000000000,
-      spent: 12100000000,
-      completion: 40,
-      manager: 'David Chen',
-      location: 'Pantai Indah Kapuk 2, Tangerang',
-      dueDate: '2027-02-28',
-      weather: { condition: 'Hujan Sedang', temp: 28, rainRisk: 'Tinggi', alert: 'Waspada galian tanah & pompa dewatering' },
+      id: 2, name: 'Harbor Retail & Resort Complex', status: 'In Progress', budget: 18000000000, spent: 5100000000, completion: 40,
+      manager: 'David Chen', location: 'PIK 2, Tangerang', dueDate: '2027-02-28',
+      weather: { condition: 'Hujan Deras', temp: 27, rainRisk: 'Tinggi', icon: 'cloud-rain', alert: 'Dewatering aktif zona B3' },
+      cashflow: [
+        { month: 'Mar', budgeted: 1500000000, actual: 1200000000 },
+        { month: 'Apr', budgeted: 2000000000, actual: 1800000000 },
+        { month: 'Mei', budgeted: 2000000000, actual: 1100000000 },
+        { month: 'Jun', budgeted: 2500000000, actual: 1000000000 },
+      ],
       phases: [
-        { id: 201, name: 'Perizinan & AMDAL', status: 'Completed', progress: 100, startDate: '2026-02-01', endDate: '2026-04-01' },
-        { id: 202, name: 'Pembersihan & Pemancangan Tiang Pancang', status: 'In Progress', progress: 75, startDate: '2026-04-02', endDate: '2026-08-30' },
-        { id: 203, name: 'Pembangunan Pondasi Rawa', status: 'Pending', progress: 0, startDate: '2026-08-15', endDate: '2026-11-30' }
+        { id: 201, name: 'Perizinan & AMDAL', status: 'Completed', progress: 100, start: '2026-02-01', end: '2026-04-01' },
+        { id: 202, name: 'Pemancangan & Sheet Pile', status: 'In Progress', progress: 75, start: '2026-04-02', end: '2026-08-30' },
+        { id: 203, name: 'Fondasi Pile Cap & Tie Beam', status: 'Pending', progress: 0, start: '2026-08-15', end: '2026-11-30' },
+        { id: 204, name: 'Struktur Atas Retail Wing', status: 'Pending', progress: 0, start: '2026-11-01', end: '2027-02-28' }
       ]
     },
     {
-      id: 3,
-      name: 'Westside Residential Estate',
-      status: 'Completed',
-      budget: 32000000000,
-      spent: 31400000000,
-      completion: 100,
-      manager: 'Marcus Johnson',
-      location: 'BSD City, Tangerang Selatan',
-      dueDate: '2025-12-20',
-      weather: { condition: 'Cerah', temp: 31, rainRisk: 'Rendah', alert: 'Proyek Selesai & Serah Terima' },
+      id: 3, name: 'Westside Residential Estate', status: 'Completed', budget: 32000000000, spent: 31400000000, completion: 100,
+      manager: 'Marcus Johnson', location: 'BSD City, Tangerang Selatan', dueDate: '2025-12-20',
+      weather: { condition: 'Cerah', temp: 31, rainRisk: 'Rendah', icon: 'sun', alert: null },
+      cashflow: [
+        { month: 'Jul', budgeted: 4000000000, actual: 4200000000 },
+        { month: 'Agu', budgeted: 5000000000, actual: 5100000000 },
+        { month: 'Sep', budgeted: 6000000000, actual: 5800000000 },
+        { month: 'Okt', budgeted: 7000000000, actual: 6900000000 },
+        { month: 'Nov', budgeted: 5500000000, actual: 5200000000 },
+        { month: 'Des', budgeted: 4500000000, actual: 4200000000 },
+      ],
       phases: [
-        { id: 301, name: 'Tahap 1 - Cluster Townhouse (40 Unit)', status: 'Completed', progress: 100, startDate: '2025-01-01', endDate: '2025-07-01' },
-        { id: 302, name: 'Tahap 2 - Apartment Tower B', status: 'Completed', progress: 100, startDate: '2025-05-01', endDate: '2025-11-15' },
-        { id: 303, name: 'Landscaping & Handover', status: 'Completed', progress: 100, startDate: '2025-11-16', endDate: '2025-12-20' }
+        { id: 301, name: 'Tahap 1 - Cluster Townhouse (40 Unit)', status: 'Completed', progress: 100, start: '2025-01-01', end: '2025-07-01' },
+        { id: 302, name: 'Tahap 2 - Apartment Tower B', status: 'Completed', progress: 100, start: '2025-05-01', end: '2025-11-15' },
+        { id: 303, name: 'Landscaping & Serah Terima', status: 'Completed', progress: 100, start: '2025-11-16', end: '2025-12-20' }
       ]
     }
   ];
 
   const DEFAULT_BOQ = [
-    { id: 1, name: 'Beton ReadyMix K-350 Slump 12', category: 'Material', quantity: 650, unit: 'm³', unitCost: 1350000 },
-    { id: 2, name: 'Besi Ulir Beton Ulir D16 & D19 (Ulir SNI)', category: 'Material', quantity: 85, unit: 'Ton', unitCost: 12800000 },
-    { id: 3, name: 'Sewa Excavator Komatsu PC200 + Bahan Bakar', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 320000 },
-    { id: 4, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
-    { id: 5, name: 'Upah Mandor & Project Engineer', category: 'Labor', quantity: 180, unit: 'Hari', unitCost: 450000 },
-    { id: 6, name: 'Pekerjaan Subkon Plumbing & Hydrant Fire System', category: 'Subcontractor', quantity: 1, unit: 'Paket', unitCost: 3500000000 }
+    { id: 1, name: 'Beton ReadyMix K-350 Slump 12±2', category: 'Material', quantity: 650, unit: 'm³', unitCost: 1350000 },
+    { id: 2, name: 'Besi Tulangan Ulir D16 SNI (KS/MG)', category: 'Material', quantity: 85, unit: 'Ton', unitCost: 12800000 },
+    { id: 3, name: 'Bekisting Multiplek Film Face 12mm', category: 'Material', quantity: 2400, unit: 'm²', unitCost: 185000 },
+    { id: 4, name: 'Sewa Excavator Komatsu PC200-8MO', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 380000 },
+    { id: 5, name: 'Sewa Tower Crane Potain MC 85', category: 'Equipment', quantity: 6, unit: 'Bulan', unitCost: 85000000 },
+    { id: 6, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
+    { id: 7, name: 'Upah Mandor & Pelaksana', category: 'Labor', quantity: 180, unit: 'Hari', unitCost: 450000 },
+    { id: 8, name: 'Subkon Plumbing & Fire System', category: 'Subcontractor', quantity: 1, unit: 'Paket', unitCost: 3500000000 },
+    { id: 9, name: 'Subkon MEP & HVAC System', category: 'Subcontractor', quantity: 1, unit: 'Paket', unitCost: 5200000000 }
   ];
 
-  const DEFAULT_SITE_LOGS = [
-    {
-      id: 101,
-      date: '2026-08-01',
-      projectName: 'Skyline Tower Alpha',
-      author: 'Sarah Jenkins',
-      summary: 'Pengecoran plat lantai 12 berjalan lancar dengan 14 truk ready mix. Pengujian slump sesuai spesifikasi K-350.',
-      weather: 'Cerah (32°C)',
-      workersCount: 48,
-      safetyStatus: 'Pass (Nihil Kecelakaan)',
-      photoUrl: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80'
-    },
-    {
-      id: 102,
-      date: '2026-07-31',
-      projectName: 'Harbor Retail & Resort Complex',
-      author: 'David Chen',
-      summary: 'Pemancangan tiang pancang mencapai titik ke-42. Terjadi penundaan 2 jam karena hujan deras di sore hari.',
-      weather: 'Hujan (27°C)',
-      workersCount: 26,
-      safetyStatus: 'Warning (Pompa Dewatering Aktif)',
-      photoUrl: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80'
-    }
+  const DEFAULT_LOGS = [
+    { id: 101, date: '2026-08-01', project: 'Skyline Tower Alpha', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', weather: 'Cerah (32°C)', workers: 48, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' },
+    { id: 102, date: '2026-07-31', project: 'Harbor Retail Complex', author: 'David Chen', summary: 'Pemancangan tiang pancang titik ke-42 dari 120. Delay 2 jam akibat hujan deras. Pompa dewatering 24 jam aktif di zona B3.', weather: 'Hujan (27°C)', workers: 26, safety: 'WARNING', photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80' },
+    { id: 103, date: '2026-07-30', project: 'Skyline Tower Alpha', author: 'Sarah Jenkins', summary: 'Pemasangan scaffolding lantai 13-14. Inspeksi K3 terjadwal dilaksanakan tanpa temuan. Safety induction 12 pekerja baru.', weather: 'Berawan (30°C)', workers: 52, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80' }
   ];
 
-  // --- STATE CONTROLLER WITH LOCALSTORAGE PERSISTENCE ---
-  function loadState(key, defaultVal) {
-    try {
-      const saved = localStorage.getItem('ch_' + key);
-      return saved ? JSON.parse(saved) : defaultVal;
-    } catch (e) {
-      return defaultVal;
-    }
+  const NOTIFICATIONS = [
+    { id: 1, type: 'warning', title: 'Cuaca Hujan Deras', desc: 'PIK 2 - Risiko tinggi untuk pekerjaan pemancangan', time: '10 menit lalu', read: false },
+    { id: 2, type: 'success', title: 'Progres Updated', desc: 'Skyline Tower - Fase Struktur Atas naik ke 55%', time: '2 jam lalu', read: false },
+    { id: 3, type: 'info', title: 'BOQ Diubah', desc: 'Mike Ross mengubah harga satuan Beton K-350', time: '5 jam lalu', read: true },
+    { id: 4, type: 'danger', title: 'Budget Alert', desc: 'Harbor Complex mendekati batas anggaran fase 2', time: '1 hari lalu', read: true },
+  ];
+
+  // ==============================
+  // STATE ENGINE (localStorage)
+  // ==============================
+  const load = (k, d) => { try { const v = localStorage.getItem('chub_' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+  const save = (k, v) => { try { localStorage.setItem('chub_' + k, JSON.stringify(v)); } catch (e) {} };
+
+  let state = {
+    projects: load('projects', DEFAULT_PROJECTS),
+    boq: load('boq', DEFAULT_BOQ),
+    logs: load('logs', DEFAULT_LOGS),
+    notifs: load('notifs', NOTIFICATIONS),
+    user: load('user', USERS[0]),
+    revenue: load('revenue', 45000000000),
+    budget: load('budget', 100000000000),
+    dark: load('dark', true),
+    tab: 'dashboard',
+    detailId: null,
+    search: '',
+    boqFilter: 'All',
+    boqSort: 'name',
+    showNotifs: false,
+    showUserMenu: false,
+    editingBoqId: null,
+  };
+
+  let deferredPWA = null;
+
+  // ==============================
+  // UTILITIES
+  // ==============================
+  const fmtIDR = n => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0);
+  const fmtShort = n => {
+    if (!n) return 'Rp 0';
+    if (n >= 1e12) return `Rp ${(n / 1e12).toFixed(1)} T`;
+    if (n >= 1e9) return `Rp ${(n / 1e9).toFixed(1)} M`;
+    if (n >= 1e6) return `Rp ${(n / 1e6).toFixed(1)} Jt`;
+    return fmtIDR(n);
+  };
+  const hasPerm = p => (PERMS[state.user.role] || []).includes(p);
+  const unreadCount = () => state.notifs.filter(n => !n.read).length;
+
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    const bg = { success: 'bg-emerald-600', error: 'bg-rose-600', warning: 'bg-amber-600', info: 'bg-indigo-600' }[type] || 'bg-indigo-600';
+    const icon = { success: 'check-circle', error: 'alert-triangle', warning: 'alert-circle', info: 'info' }[type] || 'info';
+    el.className = `toast ${bg} text-white`;
+    el.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5 shrink-0"></i><span>${msg}</span>`;
+    document.body.appendChild(el);
+    if (window.lucide) lucide.createIcons({ nodes: [el] });
+    setTimeout(() => el.remove(), 3000);
   }
 
-  function saveState(key, val) {
-    try {
-      localStorage.setItem('ch_' + key, JSON.stringify(val));
-    } catch (e) {
-      console.warn('Storage save failed:', e);
-    }
-  }
-
-  // App State
-  let projects = loadState('projects', DEFAULT_PROJECTS);
-  let boqItems = loadState('boq', DEFAULT_BOQ);
-  let siteLogs = loadState('siteLogs', DEFAULT_SITE_LOGS);
-  let currentUser = loadState('currentUser', DEFAULT_USERS[0]);
-  let estimatedRevenue = loadState('estimatedRevenue', 45000000000);
-  let companyBudget = loadState('companyBudget', 100000000000);
-  let isDarkMode = loadState('darkMode', false);
-
-  // Active View State
-  let activeTab = 'dashboard'; // 'dashboard', 'projects', 'boq', 'sitelog', 'pam'
-  let searchQuery = '';
-  let selectedProjectId = null;
-  let filterCategory = 'All';
-  let deferredPrompt = null; // For PWA install
-
-  // --- UTILITY FUNCTIONS ---
-  function formatIDR(num) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
-  }
-
-  function formatCompactIDR(num) {
-    if (!num) return 'Rp 0';
-    if (num >= 1e9) return `Rp ${(num / 1e9).toFixed(1)} M`;
-    if (num >= 1e6) return `Rp ${(num / 1e6).toFixed(1)} Jt`;
-    if (num >= 1e3) return `Rp ${(num / 1e3).toFixed(1)} Rb`;
-    return formatIDR(num);
-  }
-
-  function hasPermission(perm) {
-    const userRole = currentUser.role || 'Stakeholder';
-    return (PERMISSIONS[userRole] || []).includes(perm);
-  }
-
-  function showToast(msg, type = 'info') {
-    const toast = document.createElement('div');
-    const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-blue-600';
-    toast.className = `fixed top-5 right-5 z-50 ${bgClass} text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 text-sm font-semibold animate-bounce`;
-    toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'info'}" class="w-5 h-5"></i><span>${msg}</span>`;
-    document.body.appendChild(toast);
-    if (window.lucide) lucide.createIcons();
-    setTimeout(() => toast.remove(), 3200);
-  }
-
-  // --- PWA PROMPT LISTENER ---
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    const btn = document.getElementById('pwa-install-btn');
-    if (btn) btn.classList.remove('hidden');
-  });
-
-  // --- CORE COMPUTATION ENGINE ---
-  function getCalculations() {
-    let totalMaterial = 0, totalLabor = 0, totalEquipment = 0, totalSubcon = 0, totalBoqCost = 0;
-    boqItems.forEach(item => {
-      const cost = (item.quantity || 0) * (item.unitCost || 0);
-      totalBoqCost += cost;
-      if (item.category === 'Material') totalMaterial += cost;
-      if (item.category === 'Labor') totalLabor += cost;
-      if (item.category === 'Equipment') totalEquipment += cost;
-      if (item.category === 'Subcontractor') totalSubcon += cost;
+  function calc() {
+    let mat = 0, lab = 0, eqp = 0, sub = 0, total = 0;
+    state.boq.forEach(i => {
+      const c = (i.quantity || 0) * (i.unitCost || 0);
+      total += c;
+      if (i.category === 'Material') mat += c;
+      else if (i.category === 'Labor') lab += c;
+      else if (i.category === 'Equipment') eqp += c;
+      else if (i.category === 'Subcontractor') sub += c;
     });
-
-    const grossProfit = estimatedRevenue - totalBoqCost;
-    const profitMargin = estimatedRevenue > 0 ? ((grossProfit / estimatedRevenue) * 100).toFixed(1) : 0;
-
-    const totalAllocatedBudget = projects.reduce((acc, p) => acc + p.budget, 0);
-    const totalSpentAmount = projects.reduce((acc, p) => acc + p.spent, 0);
-    const activeProjectsCount = projects.filter(p => p.status === 'In Progress').length;
-
-    return {
-      totalMaterial, totalLabor, totalEquipment, totalSubcon, totalBoqCost,
-      grossProfit, profitMargin, totalAllocatedBudget, totalSpentAmount, activeProjectsCount
-    };
+    const profit = state.revenue - total;
+    const margin = state.revenue > 0 ? ((profit / state.revenue) * 100).toFixed(1) : 0;
+    const allocated = state.projects.reduce((a, p) => a + p.budget, 0);
+    const spent = state.projects.reduce((a, p) => a + p.spent, 0);
+    const active = state.projects.filter(p => p.status === 'In Progress').length;
+    return { mat, lab, eqp, sub, total, profit, margin, allocated, spent, active };
   }
 
-  function getProjectHealth(project) {
-    if (project.spent > project.budget) return { text: 'Over Budget (Kritis)', color: 'bg-rose-500 text-white', icon: 'alert-triangle' };
-    const expectedSpendRatio = project.completion / 100;
-    const actualSpendRatio = project.budget > 0 ? project.spent / project.budget : 0;
-    if (actualSpendRatio > expectedSpendRatio + 0.15) return { text: 'At Risk (Perlu Pengawasan)', color: 'bg-amber-500 text-white', icon: 'alert-circle' };
-    return { text: 'On Track (Aman)', color: 'bg-emerald-500 text-white', icon: 'check-circle' };
+  function health(p) {
+    if (p.spent > p.budget) return { t: 'Over Budget', badge: 'badge-danger', icon: 'alert-triangle' };
+    const exp = p.completion / 100, act = p.budget > 0 ? p.spent / p.budget : 0;
+    if (act > exp + 0.15) return { t: 'At Risk', badge: 'badge-warning', icon: 'alert-circle' };
+    return { t: 'On Track', badge: 'badge-success', icon: 'check-circle' };
   }
 
-  // --- RENDER ENGINE ---
-  function renderApp() {
+  // PWA install
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPWA = e; });
+
+  // ==============================
+  // RENDER CORE
+  // ==============================
+  function render() {
     const root = document.getElementById('app-root');
     const spinner = document.getElementById('loading-spinner');
     if (spinner) spinner.style.display = 'none';
 
-    // Apply dark mode class
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (state.dark) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
 
-    const calc = getCalculations();
+    const c = calc();
 
     root.innerHTML = `
-      <!-- TOP NAVIGATION BAR (Desktop & Mobile Header) -->
-      <header class="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          
-          <!-- Logo & Title -->
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <i data-lucide="hard-hat" class="w-6 h-6"></i>
-            </div>
-            <div>
-              <h1 class="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                CONSTRUCTION HUB
-                <span class="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-semibold uppercase">PWA v2.5</span>
-              </h1>
-              <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Enterprise Site & Financial Control System</p>
-            </div>
-          </div>
-
-          <!-- Desktop Navigation Tabs -->
-          <nav class="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/50">
-            ${renderNavButton('dashboard', 'layout-dashboard', 'Dashboard')}
-            ${renderNavButton('projects', 'folder-kanban', 'Proyek (' + projects.length + ')')}
-            ${renderNavButton('boq', 'calculator', 'BOQ / RAB')}
-            ${renderNavButton('sitelog', 'clipboard-check', 'Log Lapangan')}
-            ${renderNavButton('pam', 'shield-check', 'Access (PAM)')}
-          </nav>
-
-          <!-- Right Action Controls -->
-          <div class="flex items-center gap-2 sm:gap-3">
-            <!-- PWA Install Prompt Button -->
-            <button id="pwa-install-btn" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all">
-              <i data-lucide="download" class="w-4 h-4"></i>
-              <span class="hidden sm:inline">Install App</span>
-            </button>
-
-            <!-- Dark Mode Switcher -->
-            <button id="dark-toggle-btn" class="p-2.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all" title="Toggle Dark/Light Mode">
-              <i data-lucide="${isDarkMode ? 'sun' : 'moon'}" class="w-5 h-5"></i>
-            </button>
-
-            <!-- User PAM Avatar Badge -->
-            <div class="relative group">
-              <button id="user-menu-btn" class="flex items-center gap-2.5 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-blue-500 transition-all">
-                <div class="w-8 h-8 rounded-lg ${currentUser.color || 'bg-blue-600'} text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                  ${currentUser.initials}
-                </div>
-                <div class="text-left hidden sm:block">
-                  <p class="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">${currentUser.name}</p>
-                  <p class="text-[10px] font-semibold text-blue-600 dark:text-blue-400">${currentUser.role}</p>
-                </div>
-                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- MAIN CONTENT CONTAINER -->
-      <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        ${renderActiveTabContent(calc)}
+      ${headerHTML(c)}
+      <main class="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        ${tabContent(c)}
       </main>
-
-      <!-- MOBILE BOTTOM NAVIGATION BAR -->
-      <div class="mobile-bottom-nav">
-        ${renderMobileNavItem('dashboard', 'layout-dashboard', 'Dashboard')}
-        ${renderMobileNavItem('projects', 'folder-kanban', 'Proyek')}
-        ${renderMobileNavItem('boq', 'calculator', 'RAB')}
-        ${renderMobileNavItem('sitelog', 'clipboard-check', 'Log Site')}
-        ${renderMobileNavItem('pam', 'shield-check', 'PAM')}
-      </div>
-
-      <!-- FLOATING ACTION BUTTON (Mobile Quick Add) -->
-      ${hasPermission('edit_projects') ? `
-        <button id="fab-add-btn" class="fab-btn" title="Tambah Proyek Baru">
-          <i data-lucide="plus" class="w-7 h-7"></i>
-        </button>
-      ` : ''}
-
-      <!-- MODALS CONTAINER -->
-      <div id="modal-container"></div>
+      ${mobileNavHTML()}
+      ${hasPerm('edit_projects') ? `<button id="fab-btn" class="fab-btn no-print" title="Tambah Proyek"><i data-lucide="plus" class="w-7 h-7"></i></button>` : ''}
+      <div id="modal-root"></div>
     `;
 
-    // Re-initialize Lucide Icons
-    if (window.lucide) {
-      lucide.createIcons();
-    }
-
-    // Attach Event Listeners
-    attachEvents();
+    if (window.lucide) lucide.createIcons();
+    bind();
   }
 
-  function renderNavButton(tabId, icon, label) {
-    const isActive = activeTab === tabId;
+  // ==============================
+  // HEADER
+  // ==============================
+  function headerHTML(c) {
     return `
-      <button class="nav-tab-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-        isActive 
-          ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/80 dark:border-slate-700' 
-          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-      }" data-tab="${tabId}">
-        <i data-lucide="${icon}" class="w-4 h-4"></i>
-        <span>${label}</span>
-      </button>
-    `;
-  }
-
-  function renderMobileNavItem(tabId, icon, label) {
-    const isActive = activeTab === tabId;
-    return `
-      <button class="mobile-nav-item ${isActive ? 'active' : ''}" data-tab="${tabId}">
-        <i data-lucide="${icon}" class="w-5 h-5"></i>
-        <span>${label}</span>
-      </button>
-    `;
-  }
-
-  // --- TAB CONTENTS RENDERER ---
-  function renderActiveTabContent(calc) {
-    switch (activeTab) {
-      case 'dashboard':
-        return renderDashboardTab(calc);
-      case 'projects':
-        return renderProjectsTab();
-      case 'boq':
-        return renderBOQTab(calc);
-      case 'sitelog':
-        return renderSiteLogTab();
-      case 'pam':
-        return renderPAMTab();
-      case 'project-details':
-        return renderProjectDetailsTab();
-      default:
-        return renderDashboardTab(calc);
-    }
-  }
-
-  // 1. DASHBOARD TAB
-  function renderDashboardTab(calc) {
-    return `
-      <div class="space-y-6">
-        <!-- Page Header -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Executive Dashboard</h2>
-            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Ringkasan real-time kinerja portofolio & risiko finansial proyek.</p>
+    <header class="sticky top-0 z-40 glass no-print transition-all">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+        <!-- Logo -->
+        <div class="flex items-center gap-3 shrink-0">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
+            <i data-lucide="building-2" class="w-5 h-5"></i>
           </div>
-          <div class="flex items-center gap-2">
-            <button id="quick-export-btn" class="bg-slate-900 dark:bg-slate-100 dark:text-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md hover:bg-slate-800 transition-all">
-              <i data-lucide="file-text" class="w-4 h-4"></i>
-              <span>Cetak Laporan Portfolio</span>
-            </button>
+          <div class="hidden sm:block">
+            <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
+              CONSTRUCTION HUB
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3</span>
+            </h1>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
         </div>
 
-        <!-- Metric KPI Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Desktop Nav -->
+        <nav class="hidden lg:flex items-center bg-slate-100/80 dark:bg-slate-800/50 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-700/30">
+          ${['dashboard|layout-dashboard|Dashboard', 'projects|folder-kanban|Proyek', 'boq|calculator|BOQ / RAB', 'sitelog|clipboard-check|Log Lapangan', 'pam|shield-check|PAM'].map(t => {
+            const [id, icon, label] = t.split('|');
+            const active = state.tab === id;
+            return `<button class="tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${active ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}" data-tab="${id}"><i data-lucide="${icon}" class="w-3.5 h-3.5"></i>${label}</button>`;
+          }).join('')}
+        </nav>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          ${deferredPWA ? `<button id="pwa-btn" class="hidden sm:flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-md shadow-emerald-600/20 transition-all"><i data-lucide="download" class="w-3.5 h-3.5"></i>Install</button>` : ''}
           
-          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Budget Portofolio</span>
-              <div class="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                <i data-lucide="landmark" class="w-5 h-5"></i>
-              </div>
-            </div>
-            <p class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">${formatCompactIDR(calc.totalAllocatedBudget)}</p>
-            <p class="text-[11px] text-slate-500 font-medium mt-1">Alokasi ${projects.length} Proyek Aktif</p>
-          </div>
+          <button id="dark-btn" class="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" title="Theme">
+            <i data-lucide="${state.dark ? 'sun' : 'moon'}" class="w-5 h-5"></i>
+          </button>
 
-          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Biaya Terpakai</span>
-              <div class="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-                <i data-lucide="banknote" class="w-5 h-5"></i>
-              </div>
-            </div>
-            <p class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">${formatCompactIDR(calc.totalSpentAmount)}</p>
-            <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-3 overflow-hidden">
-              <div class="bg-emerald-500 h-full rounded-full" style="width: ${Math.min(100, (calc.totalSpentAmount / (calc.totalAllocatedBudget || 1)) * 100)}%"></div>
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Estimasi Gross Margin</span>
-              <div class="p-2 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                <i data-lucide="trending-up" class="w-5 h-5"></i>
-              </div>
-            </div>
-            <p class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">${calc.profitMargin}%</p>
-            <p class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1 flex items-center gap-1">
-              <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i> ${formatCompactIDR(calc.grossProfit)} Estimasi Profit
-            </p>
-          </div>
-
-          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Status Cuaca Lapangan</span>
-              <div class="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400">
-                <i data-lucide="cloud-rain" class="w-5 h-5"></i>
-              </div>
-            </div>
-            <p class="text-lg font-bold text-slate-900 dark:text-white mt-2 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span> Waspada Hujan
-            </p>
-            <p class="text-[11px] text-slate-500 font-medium mt-1">1 Lokasi Proyek dalam Risiko Cuaca</p>
-          </div>
-        </div>
-
-        <!-- Middle Section: Visual Cost Breakdown & Weather Alert -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          <!-- Cost Breakdown Chart -->
-          <div class="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div class="flex items-center justify-between">
-              <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <i data-lucide="pie-chart" class="w-5 h-5 text-blue-600"></i>
-                Komposisi Biaya RAB (Rencana Anggaran Biaya)
-              </h3>
-              <span class="text-xs text-slate-500 font-medium">Total: ${formatCompactIDR(calc.totalBoqCost)}</span>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center pt-2">
-              <!-- SVG Donut Chart -->
-              <div class="flex justify-center relative">
-                ${renderDonutChart(calc)}
-              </div>
-
-              <!-- Legend Details -->
-              <div class="space-y-3">
-                ${renderLegendRow('Material & Bahan', calc.totalMaterial, calc.totalBoqCost, '#2563eb')}
-                ${renderLegendRow('Tenaga Kerja (Labor)', calc.totalLabor, calc.totalBoqCost, '#f59e0b')}
-                ${renderLegendRow('Peralatan & Alat Berat', calc.totalEquipment, calc.totalBoqCost, '#10b981')}
-                ${renderLegendRow('Subkontraktor', calc.totalSubcon, calc.totalBoqCost, '#8b5cf6')}
-              </div>
-            </div>
-          </div>
-
-          <!-- Site Weather & Safety Monitor Widget -->
-          <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-xl flex flex-col justify-between relative overflow-hidden">
-            <div class="absolute -right-8 -top-8 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl"></div>
-            
-            <div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-extrabold uppercase tracking-widest text-cyan-400">Live Weather & Safety</span>
-                <i data-lucide="cloud-sun" class="w-6 h-6 text-amber-400"></i>
-              </div>
-              <h4 class="text-xl font-black mt-3">Pantau Risiko Lapangan</h4>
-              <p class="text-xs text-slate-300 mt-1">Sistem deteksi dini cuaca untuk keamanan pengecoran & alat berat.</p>
-            </div>
-
-            <div class="space-y-3 my-4">
-              ${projects.map(p => `
-                <div class="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-between gap-2">
-                  <div>
-                    <p class="text-xs font-bold text-white">${p.name}</p>
-                    <p class="text-[10px] text-slate-300 flex items-center gap-1">
-                      <i data-lucide="map-pin" class="w-3 h-3 text-cyan-400"></i> ${p.location}
-                    </p>
-                  </div>
-                  <div class="text-right">
-                    <span class="text-xs font-bold ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-400' : 'text-emerald-400'}">
-                      ${p.weather.condition} (${p.weather.temp}°C)
-                    </span>
-                    <p class="text-[9px] text-slate-300">Risiko: ${p.weather.rainRisk}</p>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-
-            <button id="view-sitelogs-link-btn" class="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl backdrop-blur-sm border border-white/20 transition-all flex items-center justify-center gap-2">
-              <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>
-              <span>Buka Log Keamanan Lapangan</span>
+          <!-- Notifications -->
+          <div class="relative">
+            <button id="notif-btn" class="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all relative">
+              <i data-lucide="bell" class="w-5 h-5"></i>
+              ${unreadCount() > 0 ? `<span class="notif-badge">${unreadCount()}</span>` : ''}
             </button>
+            ${state.showNotifs ? notifDropdownHTML() : ''}
           </div>
 
-        </div>
-
-        <!-- Bottom Section: Quick Project Status Table -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <i data-lucide="activity" class="w-5 h-5 text-blue-600"></i>
-              Ringkasan Proyek Utama
-            </h3>
-            <button class="nav-tab-btn text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline" data-tab="projects">
-              Lihat Semua Proyek →
-            </button>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-              <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
-                <tr>
-                  <th class="p-4">Nama Proyek</th>
-                  <th class="p-4">Lokasi & Manager</th>
-                  <th class="p-4">Anggaran (IDR)</th>
-                  <th class="p-4">Realisasi (Spent)</th>
-                  <th class="p-4">Progres</th>
-                  <th class="p-4">Status Kesehatan</th>
-                  <th class="p-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                ${projects.map(p => {
-                  const health = getProjectHealth(p);
-                  return `
-                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td class="p-4 font-bold text-slate-900 dark:text-white">${p.name}</td>
-                      <td class="p-4">
-                        <div class="font-medium text-slate-700 dark:text-slate-300">${p.manager}</div>
-                        <div class="text-[10px] text-slate-400">${p.location}</div>
-                      </td>
-                      <td class="p-4 font-semibold text-slate-800 dark:text-slate-200">${formatCompactIDR(p.budget)}</td>
-                      <td class="p-4 font-semibold text-slate-800 dark:text-slate-200">${formatCompactIDR(p.spent)}</td>
-                      <td class="p-4">
-                        <div class="flex items-center gap-2">
-                          <div class="w-20 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                            <div class="bg-blue-600 h-full rounded-full" style="width: ${p.completion}%"></div>
-                          </div>
-                          <span class="font-bold text-slate-700 dark:text-slate-300">${p.completion}%</span>
-                        </div>
-                      </td>
-                      <td class="p-4">
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${health.color}">
-                          <i data-lucide="${health.icon}" class="w-3 h-3"></i> ${health.text}
-                        </span>
-                      </td>
-                      <td class="p-4 text-right">
-                        <button class="open-project-btn p-2 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-100 transition-all" data-id="${p.id}">
-                          Detail →
-                        </button>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderLegendRow(label, value, total, color) {
-    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-    return `
-      <div class="flex items-center justify-between text-xs">
-        <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full" style="background-color: ${color}"></span>
-          <span class="font-medium text-slate-700 dark:text-slate-300">${label}</span>
-        </div>
-        <div class="font-bold text-slate-900 dark:text-white">
-          ${formatCompactIDR(value)} <span class="text-slate-400 text-[10px] font-normal">(${percent}%)</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderDonutChart(calc) {
-    const total = calc.totalBoqCost || 1;
-    const slices = [
-      { value: calc.totalMaterial, color: '#2563eb' },
-      { value: calc.totalLabor, color: '#f59e0b' },
-      { value: calc.totalEquipment, color: '#10b981' },
-      { value: calc.totalSubcon, color: '#8b5cf6' }
-    ];
-
-    let cumulativePercent = 0;
-    function getCoords(pct) {
-      const x = Math.cos(2 * Math.PI * pct);
-      const y = Math.sin(2 * Math.PI * pct);
-      return [x, y];
-    }
-
-    const paths = slices.map((s, i) => {
-      if (s.value === 0) return '';
-      const startPct = cumulativePercent;
-      const slicePct = s.value / total;
-      cumulativePercent += slicePct;
-      const endPct = cumulativePercent;
-
-      const [startX, startY] = getCoords(startPct);
-      const [endX, endY] = getCoords(endPct);
-      const largeArc = slicePct > 0.5 ? 1 : 0;
-
-      if (slicePct >= 0.999) {
-        return `<circle cx="0" cy="0" r="1" fill="${s.color}" />`;
-      }
-
-      return `<path d="M ${startX} ${startY} A 1 1 0 ${largeArc} 1 ${endX} ${endY} L 0 0" fill="${s.color}" />`;
-    }).join('');
-
-    return `
-      <svg viewBox="-1 -1 2 2" class="w-48 h-48 sm:w-56 sm:h-56 transform -rotate-90 filter drop-shadow-md">
-        ${paths}
-        <circle cx="0" cy="0" r="0.7" class="fill-white dark:fill-slate-900" />
-      </svg>
-      <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-        <span class="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total RAB</span>
-        <span class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">${formatCompactIDR(calc.totalBoqCost)}</span>
-      </div>
-    `;
-  }
-
-  // 2. PROJECTS TAB
-  function renderProjectsTab() {
-    const filtered = projects.filter(p => 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.manager.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    return `
-      <div class="space-y-6">
-        <!-- Header & Search Controls -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 dark:text-white">Manajemen Proyek Konstruksi</h2>
-            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Jadwal interaktif, Gantt chart, dan kontrol fase pekerjaan.</p>
-          </div>
-          
-          <div class="flex items-center gap-3">
-            <div class="relative flex-1 sm:w-64">
-              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
-              <input id="project-search-input" type="text" placeholder="Cari proyek / lokasi..." value="${searchQuery}" class="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500" />
+          <!-- User Menu -->
+          <button id="user-btn" class="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-indigo-400 transition-all">
+            <div class="w-8 h-8 rounded-lg ${state.user.color} text-white flex items-center justify-center font-black text-[11px] shadow-sm">${state.user.initials}</div>
+            <div class="hidden sm:block text-left pr-1">
+              <p class="text-[11px] font-bold leading-none">${state.user.name.split(' ')[0]}</p>
+              <p class="text-[9px] font-semibold text-indigo-500 dark:text-indigo-400">${state.user.role.split(' / ')[0]}</p>
             </div>
-
-            ${hasPermission('edit_projects') ? `
-              <button id="add-project-modal-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md shadow-blue-600/20 transition-all shrink-0">
-                <i data-lucide="plus" class="w-4 h-4"></i>
-                <span>Tambah Proyek</span>
-              </button>
-            ` : ''}
-          </div>
+          </button>
         </div>
+      </div>
+    </header>`;
+  }
 
-        <!-- Project Cards Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          ${filtered.map(p => {
-            const health = getProjectHealth(p);
+  function notifDropdownHTML() {
+    return `
+      <div class="notif-dropdown" id="notif-dropdown">
+        <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 class="text-sm font-black">Notifikasi</h3>
+          <button id="mark-all-read" class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline">Tandai Semua Dibaca</button>
+        </div>
+        <div class="divide-y divide-slate-100 dark:divide-slate-800 max-h-80 overflow-y-auto">
+          ${state.notifs.map(n => {
+            const ic = { warning: 'alert-triangle', success: 'check-circle', info: 'info', danger: 'alert-octagon' }[n.type] || 'info';
+            const col = { warning: 'text-amber-500', success: 'text-emerald-500', info: 'text-indigo-500', danger: 'text-rose-500' }[n.type];
             return `
-              <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-all space-y-4">
-                
-                <div>
-                  <div class="flex items-start justify-between gap-2">
-                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      p.status === 'Completed' ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' :
-                      p.status === 'In Progress' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300' : 'bg-slate-100 text-slate-700'
-                    }">${p.status}</span>
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${health.color}">
-                      ${health.text}
-                    </span>
-                  </div>
-
-                  <h3 class="text-lg font-extrabold text-slate-900 dark:text-white mt-3 hover:text-blue-600 cursor-pointer open-project-btn" data-id="${p.id}">
-                    ${p.name}
-                  </h3>
-                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-                    <i data-lucide="map-pin" class="w-3.5 h-3.5 text-blue-500"></i> ${p.location}
-                  </p>
+              <div class="p-4 flex items-start gap-3 ${n.read ? 'opacity-60' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <div class="${col} mt-0.5"><i data-lucide="${ic}" class="w-4 h-4"></i></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-bold">${n.title}</p>
+                  <p class="text-[11px] text-slate-500 mt-0.5">${n.desc}</p>
+                  <p class="text-[10px] text-slate-400 mt-1">${n.time}</p>
                 </div>
-
-                <!-- Metrics & Progress -->
-                <div class="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                  <div class="flex justify-between text-xs">
-                    <span class="text-slate-400">Total Budget:</span>
-                    <span class="font-bold text-slate-900 dark:text-white">${formatCompactIDR(p.budget)}</span>
-                  </div>
-                  <div class="flex justify-between text-xs">
-                    <span class="text-slate-400">Terpakai:</span>
-                    <span class="font-bold text-slate-900 dark:text-white">${formatCompactIDR(p.spent)}</span>
-                  </div>
-
-                  <div>
-                    <div class="flex justify-between text-xs mb-1">
-                      <span class="text-slate-500 font-medium">Progres Fisik</span>
-                      <span class="font-bold text-blue-600 dark:text-blue-400">${p.completion}%</span>
-                    </div>
-                    <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                      <div class="bg-blue-600 h-full rounded-full transition-all duration-500" style="width: ${p.completion}%"></div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Footer Card Info -->
-                <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                  <span class="text-slate-400 flex items-center gap-1">
-                    <i data-lucide="user" class="w-3.5 h-3.5"></i> ${p.manager}
-                  </span>
-                  <button class="open-project-btn bg-slate-900 dark:bg-slate-100 dark:text-slate-900 text-white font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 dark:hover:bg-blue-400 dark:hover:text-white transition-all text-xs" data-id="${p.id}">
-                    Lihat Timeline & Gantt →
-                  </button>
-                </div>
-
+                ${!n.read ? '<div class="w-2 h-2 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>' : ''}
               </div>
             `;
           }).join('')}
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  // 3. PROJECT DETAILS & GANTT TIMELINE TAB
-  function renderProjectDetailsTab() {
-    const project = projects.find(p => p.id === selectedProjectId);
-    if (!project) return `<div class="p-8 text-center"><p class="text-slate-500">Proyek tidak ditemukan.</p></div>`;
-
-    const health = getProjectHealth(project);
-
+  function mobileNavHTML() {
+    const items = [
+      ['dashboard', 'layout-dashboard', 'Dashboard'],
+      ['projects', 'folder-kanban', 'Proyek'],
+      ['boq', 'calculator', 'RAB'],
+      ['sitelog', 'clipboard-check', 'Log'],
+      ['pam', 'shield-check', 'PAM']
+    ];
     return `
-      <div class="space-y-6">
-        <!-- Back Navigation -->
-        <button id="back-to-projects-btn" class="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
-          <i data-lucide="arrow-left" class="w-4 h-4"></i> Kembali ke Daftar Proyek
-        </button>
+      <div class="mobile-bottom-nav no-print">
+        ${items.map(([id, icon, label]) =>
+          `<button class="mobile-nav-item ${state.tab === id ? 'active' : ''}" data-tab="${id}">
+            <i data-lucide="${icon}" class="w-5 h-5"></i><span>${label}</span>
+          </button>`
+        ).join('')}
+      </div>`;
+  }
 
-        <!-- Project Hero Card -->
-        <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div>
-              <div class="flex items-center gap-2 mb-2">
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${health.color}">${health.text}</span>
-                <span class="text-xs text-slate-400">Jatuh Tempo: ${project.dueDate}</span>
-              </div>
-              <h2 class="text-2xl font-extrabold text-slate-900 dark:text-white">${project.name}</h2>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
-                <i data-lucide="map-pin" class="w-4 h-4 text-blue-500"></i> ${project.location} | <i data-lucide="user" class="w-4 h-4 text-emerald-500"></i> PM: ${project.manager}
-              </p>
-            </div>
+  // ==============================
+  // TAB ROUTER
+  // ==============================
+  function tabContent(c) {
+    switch (state.tab) {
+      case 'dashboard': return dashboardHTML(c);
+      case 'projects': return projectsHTML();
+      case 'boq': return boqHTML(c);
+      case 'sitelog': return sitelogHTML();
+      case 'pam': return pamHTML();
+      case 'detail': return detailHTML();
+      default: return dashboardHTML(c);
+    }
+  }
 
-            <div class="flex items-center gap-3">
-              ${hasPermission('edit_projects') ? `
-                <button id="edit-project-details-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md">
-                  <i data-lucide="edit-2" class="w-4 h-4"></i> Edit Informasi Proyek
-                </button>
-              ` : ''}
-            </div>
+  // ==============================
+  // 1. DASHBOARD
+  // ==============================
+  function dashboardHTML(c) {
+    const totalProjects = state.projects.length;
+    const completedProjects = state.projects.filter(p => p.status === 'Completed').length;
+    return `
+    <div class="space-y-6 animate-fade-in">
+      <!-- Greeting -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div>
+          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Dashboard Overview</p>
+          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">Selamat ${new Date().getHours() < 12 ? 'Pagi' : new Date().getHours() < 17 ? 'Siang' : 'Malam'}, ${state.user.name.split(' ')[0]} 👋</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Berikut ringkasan portofolio konstruksi Anda hari ini.</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="export-pdf-btn" class="flex items-center gap-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all">
+            <i data-lucide="printer" class="w-4 h-4"></i>Cetak Laporan
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Cards Row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        ${kpiCard('Total Budget Portofolio', fmtShort(c.allocated), `${totalProjects} Proyek Terdaftar`, 'landmark', 'from-indigo-500 to-violet-600', 0)}
+        ${kpiCard('Total Realisasi Biaya', fmtShort(c.spent), `${((c.spent / (c.allocated || 1)) * 100).toFixed(0)}% dari Alokasi`, 'wallet', 'from-emerald-500 to-teal-600', 1)}
+        ${kpiCard('Estimasi Gross Margin', `${c.margin}%`, `${fmtShort(c.profit)} Estimasi Profit`, 'trending-up', 'from-amber-500 to-orange-600', 2)}
+        ${kpiCard('Proyek Aktif & Selesai', `${c.active} / ${completedProjects}`, `${totalProjects} Proyek Total`, 'activity', 'from-cyan-500 to-blue-600', 3)}
+      </div>
+
+      <!-- Mid Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <!-- Donut Chart -->
+        <div class="lg:col-span-3 card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <h3 class="text-sm font-black flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-indigo-500"></i>Komposisi Biaya RAB</h3>
+            <span class="text-[11px] text-slate-400 font-semibold">Total: ${fmtShort(c.total)}</span>
           </div>
-
-          <!-- Project Budget Stats -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <span class="text-xs text-slate-400 font-bold uppercase">Target Budget</span>
-              <p class="text-lg font-black text-slate-900 dark:text-white mt-1">${formatIDR(project.budget)}</p>
-            </div>
-            <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <span class="text-xs text-slate-400 font-bold uppercase">Realisasi (Spent)</span>
-              <p class="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">${formatIDR(project.spent)}</p>
-            </div>
-            <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <span class="text-xs text-slate-400 font-bold uppercase">Progres Rata-Rata Fase</span>
-              <p class="text-lg font-black text-blue-600 dark:text-blue-400 mt-1">${project.completion}%</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div class="flex justify-center relative">${donutSVG(c)}</div>
+            <div class="space-y-4">
+              ${legendRow('Material & Bahan', c.mat, c.total, '#4f46e5')}
+              ${legendRow('Tenaga Kerja', c.lab, c.total, '#f59e0b')}
+              ${legendRow('Peralatan Berat', c.eqp, c.total, '#10b981')}
+              ${legendRow('Subkontraktor', c.sub, c.total, '#8b5cf6')}
             </div>
           </div>
         </div>
 
-        <!-- Interactive Gantt Schedule Timeline -->
-        <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <i data-lucide="calendar" class="w-5 h-5 text-blue-600"></i>
-              Jadwal Waktu & Gantt Chart Timeline
-            </h3>
-            <span class="text-xs text-slate-400 font-medium">Geser slider untuk update progres fase</span>
+        <!-- Weather & Risk -->
+        <div class="lg:col-span-2 card-gradient-blue rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-300">Live Weather & Safety</span>
+              <i data-lucide="cloud-lightning" class="w-5 h-5 text-amber-400 animate-pulse-slow"></i>
+            </div>
+            <h4 class="text-lg font-black mt-3">Monitor Cuaca Proyek</h4>
+            <p class="text-xs text-indigo-200/70 mt-1">Deteksi dini risiko cuaca lapangan real-time.</p>
+          </div>
+          <div class="space-y-2.5 my-4">
+            ${state.projects.map(p => `
+              <div class="p-3 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                  <p class="text-xs font-bold truncate">${p.name}</p>
+                  <p class="text-[10px] text-indigo-200/70 flex items-center gap-1 mt-0.5"><i data-lucide="map-pin" class="w-3 h-3 text-cyan-400"></i>${p.location}</p>
+                </div>
+                <div class="text-right shrink-0">
+                  <div class="flex items-center gap-1 justify-end">
+                    <i data-lucide="${p.weather.icon}" class="w-3.5 h-3.5 ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-400' : 'text-emerald-400'}"></i>
+                    <span class="text-xs font-bold">${p.weather.temp}°C</span>
+                  </div>
+                  <p class="text-[9px] ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-300' : 'text-emerald-300'} font-semibold">${p.weather.condition}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ${state.projects.some(p => p.weather.alert) ? `
+            <div class="p-3 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center gap-2 text-xs">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
+              <span class="font-bold text-amber-200">${state.projects.find(p => p.weather.alert)?.weather.alert}</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- Projects Summary Table -->
+      <div class="card overflow-hidden">
+        <div class="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 class="text-sm font-black flex items-center gap-2"><i data-lucide="briefcase" class="w-4 h-4 text-indigo-500"></i>Daftar Proyek</h3>
+          <button class="tab-btn text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline" data-tab="projects">Lihat Semua →</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/30 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              <tr><th class="p-4">Proyek</th><th class="p-4 hidden sm:table-cell">Manager</th><th class="p-4">Budget</th><th class="p-4 hidden md:table-cell">Spent</th><th class="p-4">Progres</th><th class="p-4">Kesehatan</th><th class="p-4 text-right">Detail</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              ${state.projects.map(p => {
+                const h = health(p);
+                return `<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                  <td class="p-4"><p class="font-bold text-slate-900 dark:text-white">${p.name}</p><p class="text-[10px] text-slate-400 mt-0.5">${p.location}</p></td>
+                  <td class="p-4 hidden sm:table-cell font-medium text-slate-600 dark:text-slate-300">${p.manager}</td>
+                  <td class="p-4 font-bold">${fmtShort(p.budget)}</td>
+                  <td class="p-4 font-bold hidden md:table-cell">${fmtShort(p.spent)}</td>
+                  <td class="p-4"><div class="flex items-center gap-2"><div class="w-16 sm:w-24 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden"><div class="bg-indigo-500 h-full rounded-full" style="width:${p.completion}%"></div></div><span class="font-black text-xs">${p.completion}%</span></div></td>
+                  <td class="p-4"><span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span></td>
+                  <td class="p-4 text-right"><button class="open-detail text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline" data-id="${p.id}">Lihat →</button></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function kpiCard(label, value, sub, icon, gradient, delay) {
+    return `
+      <div class="kpi-card card p-5 animate-slide-up delay-${delay * 100 + 100}" style="animation-fill-mode: both">
+        <div class="flex items-start justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">${label}</span>
+          <div class="p-2 rounded-xl bg-gradient-to-br ${gradient} text-white shadow-lg">
+            <i data-lucide="${icon}" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <p class="text-xl sm:text-2xl font-black mt-2 counter-value">${value}</p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">${sub}</p>
+      </div>`;
+  }
+
+  function legendRow(label, val, total, color) {
+    const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+    return `
+      <div class="flex items-center justify-between text-xs group">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full shadow-sm" style="background:${color}"></span>
+          <span class="font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">${label}</span>
+        </div>
+        <div class="font-bold">
+          ${fmtShort(val)} <span class="text-slate-400 text-[10px] font-medium">(${pct}%)</span>
+        </div>
+      </div>`;
+  }
+
+  function donutSVG(c) {
+    const total = c.total || 1;
+    const slices = [
+      { v: c.mat, color: '#4f46e5' }, { v: c.lab, color: '#f59e0b' },
+      { v: c.eqp, color: '#10b981' }, { v: c.sub, color: '#8b5cf6' }
+    ];
+    let cum = 0;
+    const gc = p => [Math.cos(2 * Math.PI * p), Math.sin(2 * Math.PI * p)];
+    const paths = slices.map(s => {
+      if (!s.v) return '';
+      const sp = cum, sl = s.v / total; cum += sl;
+      if (sl >= 0.999) return `<circle cx="0" cy="0" r="1" fill="${s.color}"/>`;
+      const [sx, sy] = gc(sp), [ex, ey] = gc(cum);
+      return `<path d="M ${sx} ${sy} A 1 1 0 ${sl > 0.5 ? 1 : 0} 1 ${ex} ${ey} L 0 0" fill="${s.color}" class="hover:opacity-80 transition-opacity cursor-pointer"/>`;
+    }).join('');
+    return `
+      <svg viewBox="-1 -1 2 2" class="w-44 h-44 sm:w-52 sm:h-52 transform -rotate-90 filter drop-shadow-md">${paths}<circle cx="0" cy="0" r="0.68" class="fill-white dark:fill-[#0f1629]"/></svg>
+      <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest">Total RAB</span>
+        <span class="text-sm sm:text-base font-black">${fmtShort(c.total)}</span>
+      </div>`;
+  }
+
+  // ==============================
+  // 2. PROJECTS
+  // ==============================
+  function projectsHTML() {
+    const q = state.search.toLowerCase();
+    const filtered = state.projects.filter(p =>
+      p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q) || p.manager.toLowerCase().includes(q)
+    );
+    return `
+    <div class="space-y-6 animate-fade-in">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Project Management</p>
+          <h2 class="text-2xl font-black tracking-tight">Proyek Konstruksi (${state.projects.length})</h2>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1 sm:w-60">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+            <input id="search-input" type="text" value="${state.search}" placeholder="Cari proyek / lokasi / PM..." class="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"/>
+          </div>
+          ${hasPerm('edit_projects') ? `<button id="add-project-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25 transition-all shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Tambah</button>` : ''}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        ${filtered.map((p, i) => {
+          const h = health(p);
+          return `
+          <div class="card p-0 animate-slide-up" style="animation-delay: ${i * 80}ms; animation-fill-mode: both">
+            <!-- Card Top Gradient -->
+            <div class="h-2 bg-gradient-to-r ${p.status === 'Completed' ? 'from-emerald-500 to-teal-500' : p.status === 'In Progress' ? 'from-indigo-500 to-violet-500' : 'from-slate-400 to-slate-500'}"></div>
+            <div class="p-5 space-y-4">
+              <div class="flex items-start justify-between gap-2">
+                <span class="badge ${p.status === 'Completed' ? 'badge-success' : p.status === 'In Progress' ? 'badge-info' : 'badge-neutral'}">${p.status}</span>
+                <span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span>
+              </div>
+              <div>
+                <h3 class="text-base font-black hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer open-detail transition-colors" data-id="${p.id}">${p.name}</h3>
+                <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-indigo-500"></i>${p.location}</p>
+              </div>
+              <div class="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl space-y-2.5 border border-slate-100 dark:border-slate-700/30">
+                <div class="flex justify-between text-xs"><span class="text-slate-400">Budget</span><span class="font-bold">${fmtShort(p.budget)}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-400">Terpakai</span><span class="font-bold">${fmtShort(p.spent)}</span></div>
+                <div>
+                  <div class="flex justify-between text-xs mb-1"><span class="text-slate-500 font-medium">Progres</span><span class="font-black text-indigo-600 dark:text-indigo-400">${p.completion}%</span></div>
+                  <div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                    <div class="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-700" style="width:${p.completion}%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i>${p.manager}</span>
+                <button class="open-detail bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg transition-all text-[11px]" data-id="${p.id}">Detail & Gantt →</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ==============================
+  // 3. PROJECT DETAIL + GANTT + CASHFLOW
+  // ==============================
+  function detailHTML() {
+    const p = state.projects.find(x => x.id === state.detailId);
+    if (!p) return '<p class="text-center py-16 text-slate-500">Proyek tidak ditemukan.</p>';
+    const h = health(p);
+    const maxCF = Math.max(...(p.cashflow || []).map(cf => Math.max(cf.budgeted, cf.actual)), 1);
+    return `
+    <div class="space-y-6 animate-fade-in">
+      <button id="back-btn" class="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"><i data-lucide="arrow-left" class="w-4 h-4"></i>Kembali</button>
+
+      <!-- Hero -->
+      <div class="card p-0 overflow-hidden">
+        <div class="h-2 bg-gradient-to-r ${p.status === 'Completed' ? 'from-emerald-500 to-teal-500' : 'from-indigo-500 to-violet-500'}"></div>
+        <div class="p-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap mb-2">
+                <span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span>
+                <span class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i>Jatuh Tempo: ${p.dueDate}</span>
+              </div>
+              <h2 class="text-xl sm:text-2xl font-black">${p.name}</h2>
+              <p class="text-xs text-slate-500 mt-1 flex items-center gap-3 flex-wrap">
+                <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-500"></i>${p.location}</span>
+                <span class="flex items-center gap-1"><i data-lucide="user" class="w-3.5 h-3.5 text-emerald-500"></i>PM: ${p.manager}</span>
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <!-- Completion ring -->
+              <div class="relative w-16 h-16">
+                <svg class="w-16 h-16" viewBox="0 0 36 36">
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-200 dark:text-slate-700"/>
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3" stroke-dasharray="${p.completion}, 100" stroke-linecap="round" class="text-indigo-500 progress-ring-circle"/>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center"><span class="text-sm font-black">${p.completion}%</span></div>
+              </div>
+            </div>
           </div>
 
-          <div class="gantt-container pt-2">
-            ${project.phases.map(phase => `
+          <!-- Stats -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+              <span class="text-[10px] text-slate-400 font-bold uppercase">Budget</span>
+              <p class="text-sm font-black mt-0.5">${fmtShort(p.budget)}</p>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+              <span class="text-[10px] text-slate-400 font-bold uppercase">Realisasi</span>
+              <p class="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">${fmtShort(p.spent)}</p>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+              <span class="text-[10px] text-slate-400 font-bold uppercase">Sisa Budget</span>
+              <p class="text-sm font-black ${p.budget - p.spent < 0 ? 'text-rose-500' : ''} mt-0.5">${fmtShort(p.budget - p.spent)}</p>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+              <span class="text-[10px] text-slate-400 font-bold uppercase">Jumlah Fase</span>
+              <p class="text-sm font-black mt-0.5">${p.phases.length} Fase</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <!-- Gantt Timeline -->
+        <div class="lg:col-span-3 card p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-black flex items-center gap-2"><i data-lucide="gantt-chart" class="w-4 h-4 text-indigo-500"></i>Gantt Chart Timeline</h3>
+            <span class="text-[10px] text-slate-400 font-medium">Geser slider untuk update progres</span>
+          </div>
+          <div class="gantt-container">
+            ${p.phases.map(ph => `
               <div class="gantt-row">
                 <div>
-                  <h4 class="text-xs font-extrabold text-slate-900 dark:text-white">${phase.name}</h4>
-                  <p class="text-[10px] text-slate-400">${phase.startDate} - ${phase.endDate}</p>
+                  <h4 class="text-xs font-bold">${ph.name}</h4>
+                  <p class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                    <i data-lucide="calendar" class="w-3 h-3"></i>${ph.start} → ${ph.end}
+                  </p>
                 </div>
                 <div>
-                  <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="font-bold ${phase.progress === 100 ? 'text-emerald-600' : 'text-blue-600'}">${phase.status}</span>
-                    <span class="font-extrabold text-slate-800 dark:text-slate-200">${phase.progress}%</span>
+                  <div class="flex items-center justify-between text-xs mb-1.5">
+                    <span class="badge ${ph.progress === 100 ? 'badge-success' : ph.progress > 0 ? 'badge-info' : 'badge-neutral'}">${ph.status}</span>
+                    <span class="font-black">${ph.progress}%</span>
                   </div>
                   <div class="gantt-track">
-                    <div class="gantt-bar ${phase.progress === 100 ? 'bg-emerald-600' : 'bg-blue-600'}" style="width: ${phase.progress}%">
-                      ${phase.progress > 20 ? phase.progress + '%' : ''}
+                    <div class="gantt-bar ${ph.progress === 100 ? 'completed' : ph.progress > 0 ? 'in-progress' : 'pending'}" style="width:${Math.max(ph.progress, 2)}%">
+                      ${ph.progress >= 25 ? ph.progress + '%' : ''}
                     </div>
                   </div>
-                  ${hasPermission('edit_projects') ? `
-                    <div class="mt-2 flex items-center gap-2">
-                      <input type="range" min="0" max="100" value="${phase.progress}" class="phase-progress-slider w-full accent-blue-600" data-phase-id="${phase.id}" />
-                    </div>
+                  ${hasPerm('edit_projects') ? `
+                    <input type="range" min="0" max="100" value="${ph.progress}" class="phase-slider w-full mt-2" data-phase="${ph.id}" data-project="${p.id}"/>
                   ` : ''}
                 </div>
               </div>
             `).join('')}
           </div>
         </div>
-      </div>
-    `;
-  }
 
-  // 4. BOQ / RAB TAB
-  function renderBOQTab(calc) {
-    const filteredBOQ = filterCategory === 'All' ? boqItems : boqItems.filter(b => b.category === filterCategory);
-
-    return `
-      <div class="space-y-6">
-        <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 dark:text-white">Bill of Quantities (BOQ / RAB)</h2>
-            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Estimasi harga satuan, kuantitas material, upah, dan margin keuntungan.</p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            ${hasPermission('edit_boq') ? `
-              <button id="add-boq-item-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md">
-                <i data-lucide="plus" class="w-4 h-4"></i> Tambah Item RAB
-              </button>
-            ` : ''}
-            <button id="export-boq-csv-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md">
-              <i data-lucide="download" class="w-4 h-4"></i> Ekspor CSV
-            </button>
-          </div>
-        </div>
-
-        <!-- Margin Meter Bar -->
-        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-          <div class="flex justify-between items-center text-xs">
-            <span class="font-bold text-slate-700 dark:text-slate-300">Estimasi Pendapatan Kontrak: ${formatIDR(estimatedRevenue)}</span>
-            <span class="font-bold text-emerald-600">Profit Margin: ${calc.profitMargin}% (${formatIDR(calc.grossProfit)})</span>
-          </div>
-          <div class="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden flex">
-            <div class="bg-blue-600 h-full" style="width: ${Math.min(100, (calc.totalBoqCost / estimatedRevenue) * 100)}%" title="Biaya Operasional RAB"></div>
-            <div class="bg-emerald-500 h-full" style="width: ${Math.max(0, calc.profitMargin)}%" title="Gross Profit Margin"></div>
-          </div>
-        </div>
-
-        <!-- Category Filters -->
-        <div class="flex items-center gap-2 overflow-x-auto pb-2">
-          ${['All', 'Material', 'Labor', 'Equipment', 'Subcontractor'].map(cat => `
-            <button class="boq-filter-btn px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              filterCategory === cat 
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm' 
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-            }" data-cat="${cat}">
-              ${cat}
-            </button>
-          `).join('')}
-        </div>
-
-        <!-- RAB Table -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs text-slate-700 dark:text-slate-300">
-              <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
-                <tr>
-                  <th class="p-4">Uraian Pekerjaan / Material</th>
-                  <th class="p-4">Kategori</th>
-                  <th class="p-4">Volume / Qty</th>
-                  <th class="p-4">Satuan</th>
-                  <th class="p-4">Harga Satuan (IDR)</th>
-                  <th class="p-4">Total Biaya</th>
-                  ${hasPermission('edit_boq') ? `<th class="p-4 text-right">Aksi</th>` : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                ${filteredBOQ.map(item => {
-                  const itemTotal = (item.quantity || 0) * (item.unitCost || 0);
-                  return `
-                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td class="p-4 font-extrabold text-slate-900 dark:text-white">${item.name}</td>
-                      <td class="p-4">
-                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                          item.category === 'Material' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
-                          item.category === 'Labor' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' :
-                          item.category === 'Equipment' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' :
-                          'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                        }">${item.category}</span>
-                      </td>
-                      <td class="p-4 font-bold">${item.quantity}</td>
-                      <td class="p-4">${item.unit}</td>
-                      <td class="p-4 font-bold text-slate-800 dark:text-slate-200">${formatIDR(item.unitCost)}</td>
-                      <td class="p-4 font-extrabold text-blue-600 dark:text-blue-400">${formatIDR(itemTotal)}</td>
-                      ${hasPermission('edit_boq') ? `
-                        <td class="p-4 text-right">
-                          <button class="delete-boq-btn text-rose-500 hover:text-rose-700 p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all" data-id="${item.id}">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                          </button>
-                        </td>
-                      ` : ''}
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // 5. SITE LOG & INSPECTION TAB
-  function renderSiteLogTab() {
-    return `
-      <div class="space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-black text-slate-900 dark:text-white">Log Lapangan & Inspeksi K3</h2>
-            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Catatan harian pengawasan proyek, jumlah pekerja, & audit keselamatan kerja.</p>
-          </div>
-
-          ${hasPermission('add_sitelog') ? `
-            <button id="add-sitelog-modal-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md">
-              <i data-lucide="plus" class="w-4 h-4"></i> Buat Laporan Harian
-            </button>
-          ` : ''}
-        </div>
-
-        <!-- Site Logs Feed Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          ${siteLogs.map(log => `
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col justify-between">
-              
-              <div class="h-48 w-full overflow-hidden relative">
-                <img src="${log.photoUrl}" alt="Site Photo" class="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
-                <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                  <i data-lucide="calendar" class="w-3 h-3 text-cyan-400"></i> ${log.date}
+        <!-- Cash Flow Chart -->
+        <div class="lg:col-span-2 card p-6 space-y-4">
+          <h3 class="text-sm font-black flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-4 h-4 text-indigo-500"></i>Cash Flow Bulanan</h3>
+          ${(p.cashflow && p.cashflow.length) ? `
+            <div class="flex items-end gap-2 justify-between px-2">
+              ${p.cashflow.map(cf => `
+                <div class="cashflow-bar-group">
+                  <div class="cashflow-bar-container">
+                    <div class="cashflow-bar bg-indigo-500/30 dark:bg-indigo-500/20" style="height: ${(cf.budgeted / maxCF) * 100}%" data-value="Rencana: ${fmtShort(cf.budgeted)}"></div>
+                    <div class="cashflow-bar bg-indigo-500" style="height: ${(cf.actual / maxCF) * 100}%" data-value="Aktual: ${fmtShort(cf.actual)}"></div>
+                  </div>
+                  <span class="text-[10px] font-bold text-slate-500">${cf.month}</span>
                 </div>
-                <div class="absolute bottom-3 right-3 bg-emerald-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow-md">
-                  ${log.safetyStatus}
-                </div>
-              </div>
-
-              <div class="p-6 space-y-3">
-                <div class="flex items-center justify-between">
-                  <h3 class="text-base font-extrabold text-slate-900 dark:text-white">${log.projectName}</h3>
-                  <span class="text-xs text-slate-400 flex items-center gap-1">
-                    <i data-lucide="users" class="w-3.5 h-3.5 text-blue-500"></i> ${log.workersCount} Pekerja
-                  </span>
-                </div>
-
-                <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${log.summary}</p>
-
-                <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                  <span class="flex items-center gap-1">
-                    <i data-lucide="cloud" class="w-3.5 h-3.5 text-cyan-500"></i> ${log.weather}
-                  </span>
-                  <span class="font-semibold text-slate-700 dark:text-slate-300">Pengawas: ${log.author}</span>
-                </div>
-              </div>
-
+              `).join('')}
             </div>
-          `).join('')}
+            <div class="flex items-center justify-center gap-6 pt-2">
+              <span class="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium"><span class="w-2.5 h-2.5 rounded bg-indigo-500/30 dark:bg-indigo-500/20"></span>Rencana</span>
+              <span class="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium"><span class="w-2.5 h-2.5 rounded bg-indigo-500"></span>Aktual</span>
+            </div>
+          ` : `<p class="text-center text-xs text-slate-400 py-8">Data cash flow belum tersedia.</p>`}
         </div>
       </div>
-    `;
+
+      <!-- Weather Card -->
+      <div class="card p-5 flex flex-col sm:flex-row items-center gap-4">
+        <div class="p-3 rounded-xl ${p.weather.rainRisk === 'Tinggi' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}">
+          <i data-lucide="${p.weather.icon}" class="w-8 h-8"></i>
+        </div>
+        <div class="flex-1 text-center sm:text-left">
+          <h4 class="text-sm font-bold">Kondisi Cuaca: ${p.weather.condition} (${p.weather.temp}°C)</h4>
+          <p class="text-xs text-slate-500 mt-0.5">Tingkat Risiko Hujan: <span class="font-bold ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-500' : 'text-emerald-500'}">${p.weather.rainRisk}</span></p>
+        </div>
+        ${p.weather.alert ? `<div class="badge badge-warning shrink-0"><i data-lucide="alert-triangle" class="w-3 h-3"></i>${p.weather.alert}</div>` : `<div class="badge badge-success shrink-0"><i data-lucide="shield-check" class="w-3 h-3"></i>Aman untuk bekerja</div>`}
+      </div>
+    </div>`;
   }
 
-  // 6. PAM (PRIVILEGED ACCESS MANAGEMENT) TAB
-  function renderPAMTab() {
+  // ==============================
+  // 4. BOQ / RAB
+  // ==============================
+  function boqHTML(c) {
+    let items = state.boqFilter === 'All' ? [...state.boq] : state.boq.filter(b => b.category === state.boqFilter);
+    if (state.boqSort === 'cost-desc') items.sort((a, b) => (b.quantity * b.unitCost) - (a.quantity * a.unitCost));
+    else if (state.boqSort === 'cost-asc') items.sort((a, b) => (a.quantity * a.unitCost) - (b.quantity * b.unitCost));
+    else items.sort((a, b) => a.name.localeCompare(b.name));
+
     return `
-      <div class="space-y-6">
+    <div class="space-y-6 animate-fade-in">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-black text-slate-900 dark:text-white">Privileged Access Management (PAM)</h2>
-          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Ganti akun & peran (Role) untuk menguji otorisasi serta batas akses keamanan.</p>
+          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Cost Estimation</p>
+          <h2 class="text-2xl font-black tracking-tight">Bill of Quantities (RAB)</h2>
         </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          ${hasPerm('edit_boq') ? `<button id="add-boq-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25"><i data-lucide="plus" class="w-4 h-4"></i>Tambah Item</button>` : ''}
+          <button id="csv-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md"><i data-lucide="download" class="w-4 h-4"></i>Ekspor CSV</button>
+        </div>
+      </div>
 
-        <!-- Active User Profile Card -->
-        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-xl border border-white/30">
-              ${currentUser.initials}
-            </div>
+      <!-- Revenue & Margin Meter -->
+      <div class="card p-5 space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><i data-lucide="receipt" class="w-5 h-5"></i></div>
             <div>
-              <h3 class="text-xl font-extrabold">${currentUser.name}</h3>
-              <p class="text-xs text-blue-100 font-medium">${currentUser.email}</p>
-              <span class="inline-block mt-2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white text-blue-700">
-                ${currentUser.role}
-              </span>
+              <span class="text-[10px] font-bold uppercase text-slate-400">Estimasi Nilai Kontrak</span>
+              <p class="text-lg font-black">${fmtIDR(state.revenue)}</p>
             </div>
           </div>
-
-          <div class="text-right sm:border-l border-white/20 sm:pl-6">
-            <span class="text-xs text-blue-200">Izin Akses Aktif:</span>
-            <div class="flex flex-wrap gap-1 mt-1 justify-end">
-              ${(PERMISSIONS[currentUser.role] || []).map(p => `
-                <span class="px-2 py-0.5 rounded bg-white/20 text-[10px] font-semibold">${p}</span>
-              `).join('') || '<span class="text-xs italic text-blue-200">Hanya Membaca (Read-Only)</span>'}
-            </div>
+          <div class="text-right">
+            <span class="text-[10px] font-bold uppercase text-slate-400">Gross Profit Margin</span>
+            <p class="text-lg font-black ${Number(c.margin) >= 15 ? 'text-emerald-600' : Number(c.margin) >= 5 ? 'text-amber-600' : 'text-rose-600'}">${c.margin}%</p>
+            <p class="text-[11px] text-slate-500">${fmtShort(c.profit)}</p>
           </div>
         </div>
+        <div class="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+          <div class="bg-gradient-to-r from-indigo-500 to-violet-500 h-full transition-all duration-500" style="width:${Math.min(100, (c.total / (state.revenue || 1)) * 100)}%"></div>
+          <div class="bg-emerald-500 h-full transition-all duration-500" style="width:${Math.max(0, Number(c.margin))}%"></div>
+        </div>
+        <div class="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+          <span>Total Biaya RAB: ${fmtShort(c.total)}</span>
+          <span class="flex items-center gap-3"><span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-indigo-500"></span>Biaya</span><span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-emerald-500"></span>Margin</span></span>
+        </div>
+      </div>
 
-        <!-- Role Switcher Selection -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          ${DEFAULT_USERS.map(u => `
-            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border ${u.id === currentUser.id ? 'border-blue-600 ring-2 ring-blue-600/30' : 'border-slate-200 dark:border-slate-800'} shadow-sm space-y-4">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl ${u.color} text-white font-bold flex items-center justify-center text-sm shadow-sm">
-                  ${u.initials}
-                </div>
-                <div>
-                  <h4 class="text-sm font-extrabold text-slate-900 dark:text-white">${u.name}</h4>
-                  <p class="text-xs text-blue-600 dark:text-blue-400 font-bold">${u.role}</p>
-                </div>
-              </div>
-
-              <div class="text-[11px] text-slate-500 space-y-1">
-                <p class="font-bold text-slate-700 dark:text-slate-300">Hak Akses Modul:</p>
-                <ul class="list-disc list-inside text-slate-400">
-                  ${(PERMISSIONS[u.role] || []).map(p => `<li>${p}</li>`).join('') || '<li>Read-Only View</li>'}
-                </ul>
-              </div>
-
-              <button class="switch-user-btn w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 font-bold text-xs rounded-xl transition-all" data-user-id="${u.id}">
-                ${u.id === currentUser.id ? 'Akun Aktif ✓' : 'Ganti ke Akun Ini'}
-              </button>
-            </div>
+      <!-- Filter & Sort -->
+      <div class="flex items-center gap-3 overflow-x-auto pb-1">
+        <div class="flex items-center gap-1.5 shrink-0">
+          ${['All', 'Material', 'Labor', 'Equipment', 'Subcontractor'].map(cat => `
+            <button class="boq-cat-btn px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all ${state.boqFilter === cat ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'bg-white dark:bg-slate-800/50 text-slate-500 border border-slate-200 dark:border-slate-700/50 hover:text-indigo-600'}" data-cat="${cat}">${cat === 'All' ? 'Semua' : cat}</button>
           `).join('')}
         </div>
-      </div>
-    `;
-  }
-
-  // --- EVENT HANDLERS & LISTENERS ---
-  function attachEvents() {
-    // Navigation Tab Clicks
-    document.querySelectorAll('.nav-tab-btn, .mobile-nav-item').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const tab = btn.getAttribute('data-tab');
-        if (tab) {
-          activeTab = tab;
-          renderApp();
-        }
-      });
-    });
-
-    // Dark Mode Toggle Button
-    const darkBtn = document.getElementById('dark-toggle-btn');
-    if (darkBtn) {
-      darkBtn.addEventListener('click', () => {
-        isDarkMode = !isDarkMode;
-        saveState('darkMode', isDarkMode);
-        renderApp();
-      });
-    }
-
-    // PWA Install Button
-    const pwaBtn = document.getElementById('pwa-install-btn');
-    if (pwaBtn && deferredPrompt) {
-      pwaBtn.addEventListener('click', () => {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            showToast('PWA Terpasang dengan Sukses!', 'success');
-          }
-          deferredPrompt = null;
-          pwaBtn.classList.add('hidden');
-        });
-      });
-    }
-
-    // Quick Export Report
-    const exportBtn = document.getElementById('quick-export-btn');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', () => {
-        window.print();
-      });
-    }
-
-    // Open Project Details
-    document.querySelectorAll('.open-project-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = parseInt(btn.getAttribute('data-id'));
-        if (id) {
-          selectedProjectId = id;
-          activeTab = 'project-details';
-          renderApp();
-        }
-      });
-    });
-
-    // Back to Projects
-    const backBtn = document.getElementById('back-to-projects-btn');
-    if (backBtn) {
-      backBtn.addEventListener('click', () => {
-        activeTab = 'projects';
-        renderApp();
-      });
-    }
-
-    // Project Search Input
-    const searchInput = document.getElementById('project-search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        searchQuery = e.target.value;
-        const grid = document.querySelector('.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3');
-        if (grid) {
-          // Soft re-render search list
-          renderApp();
-        }
-      });
-    }
-
-    // Phase Progress Slider
-    document.querySelectorAll('.phase-progress-slider').forEach(slider => {
-      slider.addEventListener('change', (e) => {
-        const phaseId = parseInt(e.target.getAttribute('data-phase-id'));
-        const newProgress = parseInt(e.target.value);
-
-        const project = projects.find(p => p.id === selectedProjectId);
-        if (project && phaseId) {
-          const phase = project.phases.find(ph => ph.id === phaseId);
-          if (phase) {
-            phase.progress = newProgress;
-            phase.status = newProgress === 100 ? 'Completed' : newProgress > 0 ? 'In Progress' : 'Pending';
-
-            // Recalculate average progress
-            const avg = Math.round(project.phases.reduce((acc, ph) => acc + ph.progress, 0) / project.phases.length);
-            project.completion = avg;
-            if (avg === 100) project.status = 'Completed';
-
-            saveState('projects', projects);
-            showToast(`Progres fase "${phase.name}" diperbarui ke ${newProgress}%`, 'success');
-            renderApp();
-          }
-        }
-      });
-    });
-
-    // BOQ Filter Category
-    document.querySelectorAll('.boq-filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        filterCategory = btn.getAttribute('data-cat') || 'All';
-        renderApp();
-      });
-    });
-
-    // Delete BOQ Item
-    document.querySelectorAll('.delete-boq-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = parseInt(btn.getAttribute('data-id'));
-        if (id) {
-          boqItems = boqItems.filter(b => b.id !== id);
-          saveState('boq', boqItems);
-          showToast('Item RAB berhasil dihapus', 'success');
-          renderApp();
-        }
-      });
-    });
-
-    // Export BOQ to CSV
-    const exportCsvBtn = document.getElementById('export-boq-csv-btn');
-    if (exportCsvBtn) {
-      exportCsvBtn.addEventListener('click', () => {
-        let csv = 'Uraian,Kategori,Kuantitas,Satuan,Harga Satuan (IDR),Total (IDR)\n';
-        boqItems.forEach(b => {
-          csv += `"${b.name}","${b.category}",${b.quantity},"${b.unit}",${b.unitCost},${b.quantity * b.unitCost}\n`;
-        });
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `BOQ_RAB_ConstructionHub_${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        showToast('File CSV berhasil diunduh', 'success');
-      });
-    }
-
-    // Switch User (PAM)
-    document.querySelectorAll('.switch-user-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const uid = btn.getAttribute('data-user-id');
-        const found = DEFAULT_USERS.find(u => u.id === uid);
-        if (found) {
-          currentUser = found;
-          saveState('currentUser', currentUser);
-          showToast(`Akun berganti ke: ${currentUser.name} (${currentUser.role})`, 'success');
-          renderApp();
-        }
-      });
-    });
-
-    // FAB / Modal Add Project Click
-    const fabBtn = document.getElementById('fab-add-btn');
-    const addProjectBtn = document.getElementById('add-project-modal-btn');
-    if (fabBtn) fabBtn.addEventListener('click', openAddProjectModal);
-    if (addProjectBtn) addProjectBtn.addEventListener('click', openAddProjectModal);
-
-    // View Site Logs Link Button
-    const viewLogsBtn = document.getElementById('view-sitelogs-link-btn');
-    if (viewLogsBtn) {
-      viewLogsBtn.addEventListener('click', () => {
-        activeTab = 'sitelog';
-        renderApp();
-      });
-    }
-  }
-
-  // --- MODALS ENGINE ---
-  function openAddProjectModal() {
-    if (!hasPermission('edit_projects')) {
-      showToast('Akses Ditolak: Membutuhkan peran CEO atau PM', 'error');
-      return;
-    }
-
-    const modalContainer = document.getElementById('modal-container');
-    modalContainer.innerHTML = `
-      <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 border border-slate-200 dark:border-slate-800">
-          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Tambah Proyek Konstruksi</h3>
-            <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-          </div>
-
-          <form id="add-project-form" class="space-y-3 text-xs">
-            <div>
-              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Proyek</label>
-              <input type="text" id="m-name" required placeholder="Contoh: Gedung Office Tower C" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl" />
-            </div>
-
-            <div>
-              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Lokasi Proyek</label>
-              <input type="text" id="m-location" required placeholder="Contoh: Kebayoran Baru, Jakarta" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl" />
-            </div>
-
-            <div>
-              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Anggaran Proyek (IDR)</label>
-              <input type="number" id="m-budget" required placeholder="15000000000" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl" />
-            </div>
-
-            <div>
-              <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Project Manager (PM)</label>
-              <input type="text" id="m-manager" value="${currentUser.name}" class="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl" />
-            </div>
-
-            <div class="pt-3 flex justify-end gap-2">
-              <button type="button" id="cancel-modal-btn" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl text-slate-600 dark:text-slate-300">Batal</button>
-              <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md">Simpan Proyek</button>
-            </div>
-          </form>
+        <div class="ml-auto shrink-0">
+          <select id="boq-sort" class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-[11px] font-bold px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+            <option value="name" ${state.boqSort === 'name' ? 'selected' : ''}>Urutkan: Nama</option>
+            <option value="cost-desc" ${state.boqSort === 'cost-desc' ? 'selected' : ''}>Biaya: Tertinggi</option>
+            <option value="cost-asc" ${state.boqSort === 'cost-asc' ? 'selected' : ''}>Biaya: Terendah</option>
+          </select>
         </div>
       </div>
-    `;
 
+      <!-- BOQ Table -->
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 dark:bg-slate-800/30 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              <tr>
+                <th class="p-4">Uraian Pekerjaan / Material</th>
+                <th class="p-4">Kategori</th>
+                <th class="p-4">Volume</th>
+                <th class="p-4">Satuan</th>
+                <th class="p-4">Harga Satuan</th>
+                <th class="p-4">Total Biaya</th>
+                ${hasPerm('edit_boq') ? '<th class="p-4 text-right">Aksi</th>' : ''}
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              ${items.map(item => {
+                const t = (item.quantity || 0) * (item.unitCost || 0);
+                const isEditing = state.editingBoqId === item.id;
+                const catBadge = { Material: 'badge-info', Labor: 'badge-warning', Equipment: 'badge-success', Subcontractor: 'badge-neutral' }[item.category] || 'badge-neutral';
+                return `
+                <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors ${isEditing ? 'ring-2 ring-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10' : ''}">
+                  <td class="p-4 font-bold max-w-[200px]">
+                    ${isEditing ? `<input class="inline-edit boq-edit-field font-bold" data-id="${item.id}" data-field="name" value="${item.name}"/>` : item.name}
+                  </td>
+                  <td class="p-4"><span class="badge ${catBadge}">${item.category}</span></td>
+                  <td class="p-4 font-bold">
+                    ${isEditing ? `<input type="number" class="inline-edit boq-edit-field font-bold w-20" data-id="${item.id}" data-field="quantity" value="${item.quantity}"/>` : item.quantity.toLocaleString('id-ID')}
+                  </td>
+                  <td class="p-4 text-slate-500">${item.unit}</td>
+                  <td class="p-4 font-bold">
+                    ${isEditing ? `<input type="number" class="inline-edit boq-edit-field font-bold w-32" data-id="${item.id}" data-field="unitCost" value="${item.unitCost}"/>` : fmtIDR(item.unitCost)}
+                  </td>
+                  <td class="p-4 font-black text-indigo-600 dark:text-indigo-400">${fmtIDR(t)}</td>
+                  ${hasPerm('edit_boq') ? `
+                    <td class="p-4 text-right flex items-center justify-end gap-1">
+                      <button class="boq-edit-btn p-2 rounded-lg ${isEditing ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600'} transition-all" data-id="${item.id}">
+                        <i data-lucide="${isEditing ? 'check' : 'edit-2'}" class="w-4 h-4"></i>
+                      </button>
+                      <button class="boq-del-btn p-2 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/30 text-slate-400 hover:text-rose-600 transition-all" data-id="${item.id}">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </td>
+                  ` : ''}
+                </tr>`;
+              }).join('')}
+            </tbody>
+            <tfoot class="bg-slate-50 dark:bg-slate-800/30 border-t-2 border-indigo-500/30">
+              <tr>
+                <td class="p-4 font-black text-sm" colspan="${hasPerm('edit_boq') ? 5 : 5}">TOTAL RENCANA ANGGARAN BIAYA</td>
+                <td class="p-4 font-black text-base text-indigo-600 dark:text-indigo-400" ${hasPerm('edit_boq') ? '' : ''}>${fmtIDR(c.total)}</td>
+                ${hasPerm('edit_boq') ? '<td></td>' : ''}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ==============================
+  // 5. SITE LOG
+  // ==============================
+  function sitelogHTML() {
+    return `
+    <div class="space-y-6 animate-fade-in">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Field Reports</p>
+          <h2 class="text-2xl font-black tracking-tight">Log Lapangan & Inspeksi K3</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Catatan harian pengawasan, foto proyek, & audit keselamatan kerja.</p>
+        </div>
+        ${hasPerm('add_sitelog') ? `<button id="add-log-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25 shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Buat Laporan</button>` : ''}
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        ${state.logs.map((log, i) => `
+          <div class="card p-0 overflow-hidden animate-slide-up" style="animation-delay: ${i * 100}ms; animation-fill-mode: both">
+            <div class="h-52 w-full overflow-hidden relative group">
+              <img src="${log.photo}" alt="${log.project}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy"/>
+              <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+              <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                <i data-lucide="calendar" class="w-3 h-3 text-cyan-400"></i>${log.date}
+              </div>
+              <div class="absolute bottom-3 right-3">
+                <span class="badge ${log.safety === 'PASS' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}" style="font-size: 0.6rem">
+                  <i data-lucide="${log.safety === 'PASS' ? 'shield-check' : 'shield-alert'}" class="w-3 h-3"></i>K3: ${log.safety}
+                </span>
+              </div>
+              <h3 class="absolute bottom-3 left-3 text-white font-black text-sm drop-shadow-lg">${log.project}</h3>
+            </div>
+            <div class="p-5 space-y-3">
+              <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${log.summary}</p>
+              <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px]">
+                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="cloud" class="w-3 h-3 text-cyan-500"></i>${log.weather}</span>
+                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-indigo-500"></i>${log.workers} Pekerja</span>
+              </div>
+              <p class="text-[10px] text-slate-400">Pengawas: <span class="font-bold text-slate-600 dark:text-slate-300">${log.author}</span></p>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ==============================
+  // 6. PAM
+  // ==============================
+  function pamHTML() {
+    return `
+    <div class="space-y-6 animate-fade-in">
+      <div>
+        <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Security & Access</p>
+        <h2 class="text-2xl font-black tracking-tight">Privileged Access Management</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Ganti peran pengguna untuk menguji otorisasi & batas akses keamanan sistem.</p>
+      </div>
+
+      <!-- Active User Hero -->
+      <div class="rounded-2xl overflow-hidden relative">
+        <div class="absolute inset-0 bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700"></div>
+        <div class="absolute inset-0 opacity-10" style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><path d=%22M30 0L60 30L30 60L0 30Z%22 fill=%22white%22 fill-opacity=%220.1%22/></svg>'); background-size: 30px 30px;"></div>
+        <div class="relative p-6 sm:p-8 text-white flex flex-col sm:flex-row items-center gap-6">
+          <div class="w-20 h-20 rounded-2xl bg-white/15 backdrop-blur-lg border border-white/20 flex items-center justify-center font-black text-3xl shadow-xl">${state.user.initials}</div>
+          <div class="text-center sm:text-left flex-1">
+            <h3 class="text-2xl font-black">${state.user.name}</h3>
+            <p class="text-sm text-indigo-200 mt-0.5">${state.user.email}</p>
+            <span class="inline-block mt-3 px-4 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white/20 backdrop-blur-md border border-white/20">${state.user.role}</span>
+          </div>
+          <div class="text-center sm:text-right sm:border-l border-white/20 sm:pl-6">
+            <span class="text-xs text-indigo-200 block mb-2">Izin Akses Aktif:</span>
+            <div class="flex flex-wrap gap-1.5 justify-center sm:justify-end">
+              ${(PERMS[state.user.role] || []).map(p => `<span class="px-2.5 py-1 rounded-lg bg-white/15 text-[10px] font-bold">${p}</span>`).join('') || '<span class="text-xs italic text-indigo-200">Read-Only View</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Role Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        ${USERS.map(u => `
+          <div class="card p-5 space-y-4 ${u.id === state.user.id ? 'ring-2 ring-indigo-500 shadow-lg shadow-indigo-500/10' : ''}">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-xl ${u.color} text-white font-black flex items-center justify-center text-sm shadow-lg">${u.initials}</div>
+              <div>
+                <h4 class="text-sm font-black">${u.name}</h4>
+                <p class="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">${u.role}</p>
+              </div>
+            </div>
+            <div class="text-[11px] text-slate-500 space-y-1.5">
+              <p class="font-bold text-slate-700 dark:text-slate-300 text-xs">Hak Akses:</p>
+              <ul class="space-y-1">
+                ${(PERMS[u.role] || []).map(p => `<li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3 text-emerald-500"></i>${p}</li>`).join('') || '<li class="flex items-center gap-1.5"><i data-lucide="eye" class="w-3 h-3 text-slate-400"></i>Read-Only</li>'}
+              </ul>
+            </div>
+            <button class="switch-user-btn w-full py-2.5 ${u.id === state.user.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white'} font-bold text-xs rounded-xl transition-all" data-uid="${u.id}">
+              ${u.id === state.user.id ? '✓ Akun Aktif' : 'Ganti ke Akun Ini'}
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ==============================
+  // EVENT BINDINGS
+  // ==============================
+  function bind() {
+    // Tab navigation
+    document.querySelectorAll('.tab-btn, .mobile-nav-item').forEach(b => b.addEventListener('click', () => {
+      state.tab = b.dataset.tab;
+      state.showNotifs = false;
+      render();
+    }));
+
+    // Dark mode
+    document.getElementById('dark-btn')?.addEventListener('click', () => { state.dark = !state.dark; save('dark', state.dark); render(); });
+
+    // Notifications
+    document.getElementById('notif-btn')?.addEventListener('click', (e) => { e.stopPropagation(); state.showNotifs = !state.showNotifs; render(); });
+    document.getElementById('mark-all-read')?.addEventListener('click', () => { state.notifs.forEach(n => n.read = true); save('notifs', state.notifs); render(); });
+
+    // Close notification on outside click
+    document.addEventListener('click', (e) => {
+      if (state.showNotifs && !e.target.closest('#notif-btn') && !e.target.closest('#notif-dropdown')) {
+        state.showNotifs = false; render();
+      }
+    }, { once: true });
+
+    // PWA install
+    document.getElementById('pwa-btn')?.addEventListener('click', () => { if (deferredPWA) { deferredPWA.prompt(); deferredPWA = null; } });
+
+    // User menu -> PAM tab
+    document.getElementById('user-btn')?.addEventListener('click', () => { state.tab = 'pam'; state.showNotifs = false; render(); });
+
+    // Open project detail
+    document.querySelectorAll('.open-detail').forEach(b => b.addEventListener('click', () => {
+      state.detailId = parseInt(b.dataset.id); state.tab = 'detail'; render();
+    }));
+
+    // Back
+    document.getElementById('back-btn')?.addEventListener('click', () => { state.tab = 'projects'; render(); });
+
+    // Search
+    document.getElementById('search-input')?.addEventListener('input', e => { state.search = e.target.value; render(); });
+
+    // Phase slider
+    document.querySelectorAll('.phase-slider').forEach(s => s.addEventListener('input', e => {
+      const pId = parseInt(s.dataset.project), phId = parseInt(s.dataset.phase), val = parseInt(e.target.value);
+      const proj = state.projects.find(p => p.id === pId);
+      if (!proj) return;
+      const ph = proj.phases.find(x => x.id === phId);
+      if (!ph) return;
+      ph.progress = val;
+      ph.status = val === 100 ? 'Completed' : val > 0 ? 'In Progress' : 'Pending';
+      proj.completion = Math.round(proj.phases.reduce((a, x) => a + x.progress, 0) / proj.phases.length);
+      if (proj.completion === 100) proj.status = 'Completed';
+      else if (proj.completion > 0) proj.status = 'In Progress';
+      save('projects', state.projects);
+      render();
+    }));
+
+    // BOQ category filter
+    document.querySelectorAll('.boq-cat-btn').forEach(b => b.addEventListener('click', () => { state.boqFilter = b.dataset.cat; render(); }));
+
+    // BOQ sort
+    document.getElementById('boq-sort')?.addEventListener('change', e => { state.boqSort = e.target.value; render(); });
+
+    // BOQ inline edit toggle
+    document.querySelectorAll('.boq-edit-btn').forEach(b => b.addEventListener('click', () => {
+      const id = parseInt(b.dataset.id);
+      if (state.editingBoqId === id) {
+        // Save changes from inputs
+        document.querySelectorAll(`.boq-edit-field[data-id="${id}"]`).forEach(inp => {
+          const field = inp.dataset.field, val = inp.value;
+          const item = state.boq.find(x => x.id === id);
+          if (item) item[field] = field === 'name' ? val : parseFloat(val) || 0;
+        });
+        save('boq', state.boq);
+        state.editingBoqId = null;
+        toast('Item RAB berhasil diperbarui', 'success');
+      } else {
+        state.editingBoqId = id;
+      }
+      render();
+    }));
+
+    // BOQ delete
+    document.querySelectorAll('.boq-del-btn').forEach(b => b.addEventListener('click', () => {
+      const id = parseInt(b.dataset.id);
+      state.boq = state.boq.filter(x => x.id !== id);
+      save('boq', state.boq);
+      toast('Item RAB dihapus', 'success');
+      render();
+    }));
+
+    // Add BOQ item
+    document.getElementById('add-boq-btn')?.addEventListener('click', () => {
+      state.boq.push({ id: Date.now(), name: 'Item Baru', category: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 });
+      state.editingBoqId = state.boq[state.boq.length - 1].id;
+      save('boq', state.boq);
+      render();
+    });
+
+    // Export CSV
+    document.getElementById('csv-btn')?.addEventListener('click', () => {
+      let csv = '\uFEFF"Uraian","Kategori","Volume","Satuan","Harga Satuan","Total"\n';
+      state.boq.forEach(b => { csv += `"${b.name}","${b.category}",${b.quantity},"${b.unit}",${b.unitCost},${b.quantity * b.unitCost}\n`; });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `RAB_ConstructionHub_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click(); toast('CSV berhasil diunduh', 'success');
+    });
+
+    // Print
+    document.getElementById('export-pdf-btn')?.addEventListener('click', () => window.print());
+
+    // Switch user (PAM)
+    document.querySelectorAll('.switch-user-btn').forEach(b => b.addEventListener('click', () => {
+      const u = USERS.find(x => x.id === b.dataset.uid);
+      if (u) { state.user = u; save('user', u); state.editingBoqId = null; toast(`Masuk sebagai: ${u.name} (${u.role})`, 'success'); render(); }
+    }));
+
+    // FAB
+    document.getElementById('fab-btn')?.addEventListener('click', openAddProjectModal);
+    document.getElementById('add-project-btn')?.addEventListener('click', openAddProjectModal);
+
+    // Add site log
+    document.getElementById('add-log-btn')?.addEventListener('click', openAddLogModal);
+  }
+
+  // ==============================
+  // MODALS
+  // ==============================
+  function openAddProjectModal() {
+    if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `
+    <div class="modal-overlay" id="modal-bg">
+      <div class="modal-content p-6 space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="building-2" class="w-5 h-5 text-indigo-500"></i>Tambah Proyek Baru</h3>
+          <button id="close-modal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+        </div>
+        <form id="project-form" class="space-y-4 text-xs">
+          <div><label class="block font-bold text-slate-500 mb-1.5">Nama Proyek *</label><input type="text" id="pf-name" required placeholder="Contoh: Gedung Kantor Tower C" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none"/></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5">Lokasi *</label><input type="text" id="pf-loc" required placeholder="Jakarta Selatan" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5">Project Manager</label><input type="text" id="pf-pm" value="${state.user.name}" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5">Anggaran (IDR) *</label><input type="number" id="pf-budget" required placeholder="15000000000" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5">Target Selesai</label><input type="date" id="pf-date" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Batal</button>
+            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">Simpan Proyek</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
     if (window.lucide) lucide.createIcons();
-
-    document.getElementById('close-modal-btn').onclick = () => modalContainer.innerHTML = '';
-    document.getElementById('cancel-modal-btn').onclick = () => modalContainer.innerHTML = '';
-
-    document.getElementById('add-project-form').onsubmit = (e) => {
+    const close = () => { root.innerHTML = ''; };
+    document.getElementById('close-modal').onclick = close;
+    document.getElementById('cancel-modal').onclick = close;
+    document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
+    document.getElementById('project-form').onsubmit = e => {
       e.preventDefault();
-      const newP = {
-        id: Date.now(),
-        name: document.getElementById('m-name').value,
-        location: document.getElementById('m-location').value,
-        budget: parseFloat(document.getElementById('m-budget').value) || 0,
-        spent: 0,
-        completion: 0,
-        status: 'In Progress',
-        manager: document.getElementById('m-manager').value,
-        dueDate: '2027-01-01',
-        weather: { condition: 'Cerah', temp: 30, rainRisk: 'Rendah', alert: 'Proyek Baru Diinisiasi' },
+      state.projects.push({
+        id: Date.now(), name: document.getElementById('pf-name').value,
+        location: document.getElementById('pf-loc').value,
+        manager: document.getElementById('pf-pm').value || state.user.name,
+        budget: parseFloat(document.getElementById('pf-budget').value) || 0,
+        dueDate: document.getElementById('pf-date').value || '2027-06-01',
+        spent: 0, completion: 0, status: 'Planning',
+        weather: { condition: 'Cerah', temp: 30, rainRisk: 'Rendah', icon: 'sun', alert: null },
+        cashflow: [],
         phases: [
-          { id: Date.now() + 1, name: 'Persiapan Lahan & Perizinan', status: 'In Progress', progress: 20, startDate: '2026-08-01', endDate: '2026-09-30' },
-          { id: Date.now() + 2, name: 'Pekerjaan Substructure', status: 'Pending', progress: 0, startDate: '2026-10-01', endDate: '2026-12-31' }
+          { id: Date.now() + 1, name: 'Perencanaan & Perizinan', status: 'In Progress', progress: 20, start: new Date().toISOString().slice(0, 10), end: '2027-01-01' },
+          { id: Date.now() + 2, name: 'Pekerjaan Substructure', status: 'Pending', progress: 0, start: '2027-01-02', end: '2027-03-01' }
         ]
-      };
-
-      projects.push(newP);
-      saveState('projects', projects);
-      modalContainer.innerHTML = '';
-      showToast('Proyek baru berhasil ditambahkan!', 'success');
-      activeTab = 'projects';
-      renderApp();
+      });
+      save('projects', state.projects);
+      close(); toast('Proyek baru berhasil ditambahkan!', 'success');
+      state.tab = 'projects'; render();
     };
   }
 
-  // --- APP INITIALIZATION ---
-  document.addEventListener('DOMContentLoaded', () => {
-    renderApp();
-  });
-
-  // Direct boot if already loaded
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    renderApp();
+  function openAddLogModal() {
+    if (!hasPerm('add_sitelog')) return toast('Akses ditolak', 'error');
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `
+    <div class="modal-overlay" id="modal-bg">
+      <div class="modal-content p-6 space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-500"></i>Buat Laporan Harian</h3>
+          <button id="close-modal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+        </div>
+        <form id="log-form" class="space-y-4 text-xs">
+          <div><label class="block font-bold text-slate-500 mb-1.5">Proyek *</label>
+            <select id="lf-proj" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
+              ${state.projects.filter(p => p.status !== 'Completed').map(p => `<option value="${p.name}">${p.name}</option>`).join('')}
+            </select>
+          </div>
+          <div><label class="block font-bold text-slate-500 mb-1.5">Ringkasan Laporan *</label><textarea id="lf-sum" required rows="3" placeholder="Deskripsi pekerjaan hari ini..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5">Cuaca</label><input type="text" id="lf-weather" value="Cerah (30°C)" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5">Jumlah Pekerja</label><input type="number" id="lf-workers" value="30" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5">Status K3</label>
+              <select id="lf-safety" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
+                <option value="PASS">PASS</option><option value="WARNING">WARNING</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Batal</button>
+            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">Simpan Laporan</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+    if (window.lucide) lucide.createIcons();
+    const close = () => { root.innerHTML = ''; };
+    document.getElementById('close-modal').onclick = close;
+    document.getElementById('cancel-modal').onclick = close;
+    document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
+    document.getElementById('log-form').onsubmit = e => {
+      e.preventDefault();
+      state.logs.unshift({
+        id: Date.now(), date: new Date().toISOString().slice(0, 10),
+        project: document.getElementById('lf-proj').value,
+        author: state.user.name,
+        summary: document.getElementById('lf-sum').value,
+        weather: document.getElementById('lf-weather').value,
+        workers: parseInt(document.getElementById('lf-workers').value) || 0,
+        safety: document.getElementById('lf-safety').value,
+        photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80'
+      });
+      save('logs', state.logs);
+      close(); toast('Laporan harian berhasil disimpan!', 'success');
+      render();
+    };
   }
+
+  // ==============================
+  // BOOT
+  // ==============================
+  function boot() {
+    render();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
