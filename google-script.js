@@ -29,21 +29,23 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
+    lock.waitLock(10000);
     const contents = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    if (contents.projects) {
+    if (Array.isArray(contents.projects)) {
       const projectsSheet = getOrCreateSheet(ss, 'Projects');
       saveJSONToSheet(projectsSheet, contents.projects);
     }
 
-    if (contents.boq) {
+    if (Array.isArray(contents.boq)) {
       const boqSheet = getOrCreateSheet(ss, 'BOQ');
       saveJSONToSheet(boqSheet, contents.boq);
     }
 
-    if (contents.siteLogs) {
+    if (Array.isArray(contents.siteLogs)) {
       const logsSheet = getOrCreateSheet(ss, 'SiteLogs');
       saveJSONToSheet(logsSheet, contents.siteLogs);
     }
@@ -56,6 +58,8 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
   }
 }
 
@@ -81,7 +85,7 @@ function getSheetJSON(sheet) {
 }
 
 function saveJSONToSheet(sheet, jsonArray) {
-  sheet.clear();
+  sheet.clearContents();
   sheet.appendRow(['Data JSON']);
   sheet.appendRow([JSON.stringify(jsonArray)]);
 }

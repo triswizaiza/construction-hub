@@ -1,5 +1,5 @@
 /**
- * Construction Hub v3.2 - Enterprise Site & Financial Management
+ * Construction Hub v3.3 - Enterprise Site & Financial Management
  * Premium PWA with Google Drive / Google Sheets Cloud Sync Integration
  */
 (function () {
@@ -8,7 +8,9 @@
   // ==============================
   // DATA LAYER & DEFAULTS (CLEAN INITIAL DATA)
   // ==============================
-  const DATA_VERSION = 'v3.2_single_project_reset';
+  const DATA_VERSION = 'v3.3.2_operational_pulse';
+  const CLOUD_SYNC_DELAY = 800;
+  const DEFAULT_LOG_PHOTO = 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80';
 
   const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
@@ -29,7 +31,6 @@
     {
       id: 1, name: 'Proyek Contoh: Skyline Tower', status: 'In Progress', budget: 25500000000, spent: 14200000000, completion: 65,
       manager: 'Sarah Jenkins', location: 'SCBD, Jakarta Selatan', dueDate: '2026-11-15',
-      weather: { condition: 'Cerah Berawan', temp: 32, rainRisk: 'Rendah', icon: 'sun', alert: null },
       cashflow: [
         { month: 'Jan', budgeted: 2000000000, actual: 1800000000 },
         { month: 'Feb', budgeted: 2500000000, actual: 2300000000 },
@@ -55,47 +56,156 @@
   ];
 
   const DEFAULT_LOGS = [
-    { id: 101, date: '2026-08-01', project: 'Proyek Contoh: Skyline Tower', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', weather: 'Cerah (32°C)', workers: 48, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' }
+    { id: 101, date: '2026-08-01', project: 'Proyek Contoh: Skyline Tower', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', workers: 48, safety: 'PASS', safetyNote: 'Toolbox meeting selesai dan area kerja dinyatakan aman.', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' }
   ];
 
   const NOTIFICATIONS = [
     { id: 1, type: 'info', title: 'Selamat Datang di Construction Hub', desc: 'Sistem siap digunakan. Tambahkan proyek baru dari tombol (+)', time: 'Baru saja', read: false }
   ];
 
-  // Auto-reset cache on version update
-  try {
-    const currentVer = localStorage.getItem('chub_ver');
-    if (currentVer !== DATA_VERSION) {
-      localStorage.removeItem('chub_projects');
-      localStorage.removeItem('chub_boq');
-      localStorage.removeItem('chub_logs');
-      localStorage.setItem('chub_ver', DATA_VERSION);
-    }
-  } catch (e) {}
-
   // ==============================
   // STATE ENGINE (localStorage & Cloud)
   // ==============================
   const load = (k, d) => { try { const v = localStorage.getItem('chub_' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
-  const save = (k, v) => {
+  const clone = value => JSON.parse(JSON.stringify(value));
+  const textValue = (value, fallback = '') => typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  const numberValue = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, numberValue(value, min)));
+  const todayISO = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 10);
+  };
+  const addDaysISO = (dateValue, days) => {
+    const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || '')) ? String(dateValue) : todayISO();
+    const date = new Date(`${safeDate}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  };
+  const validDate = (value, fallback = todayISO()) => {
+    const candidate = String(value || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return fallback;
+    const parsed = new Date(`${candidate}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate ? candidate : fallback;
+  };
+  const safeImageUrl = value => {
     try {
-      localStorage.setItem('chub_' + k, JSON.stringify(v));
-      if (state.googleSheetUrl && (k === 'projects' || k === 'boq' || k === 'logs')) {
-        pushToGoogleSheets();
-      }
-    } catch (e) {}
+      const url = new URL(String(value || ''));
+      return url.protocol === 'https:' ? url.href : DEFAULT_LOG_PHOTO;
+    } catch (e) {
+      return DEFAULT_LOG_PHOTO;
+    }
   };
 
+  function normalizeProject(project = {}, index = 0) {
+    const phases = Array.isArray(project.phases) ? project.phases.map((phase, phaseIndex) => {
+      const progress = clamp(phase.progress, 0, 100);
+      return {
+        id: numberValue(phase.id, Date.now() + index * 100 + phaseIndex),
+        name: textValue(phase.name, `Fase ${phaseIndex + 1}`),
+        status: progress === 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Pending',
+        progress,
+        start: validDate(phase.start),
+        end: validDate(phase.end, validDate(project.dueDate, addDaysISO(todayISO(), 365)))
+      };
+    }) : [];
+    const completion = phases.length
+      ? Math.round(phases.reduce((total, phase) => total + phase.progress, 0) / phases.length)
+      : clamp(project.completion, 0, 100);
+    const fallbackStatus = completion === 100 ? 'Completed' : completion > 0 ? 'In Progress' : 'Planning';
+    return {
+      id: numberValue(project.id, Date.now() + index),
+      name: textValue(project.name, `Proyek ${index + 1}`),
+      status: fallbackStatus,
+      budget: Math.max(0, numberValue(project.budget)),
+      spent: Math.max(0, numberValue(project.spent)),
+      completion,
+      manager: textValue(project.manager, 'Belum ditentukan'),
+      location: textValue(project.location, 'Lokasi belum ditentukan'),
+      dueDate: validDate(project.dueDate, addDaysISO(todayISO(), 365)),
+      cashflow: Array.isArray(project.cashflow) ? project.cashflow.map(cf => ({
+        month: textValue(cf.month, '-'),
+        budgeted: Math.max(0, numberValue(cf.budgeted)),
+        actual: Math.max(0, numberValue(cf.actual))
+      })) : [],
+      phases
+    };
+  }
+
+  function normalizeBoqItem(item = {}, index = 0) {
+    const categories = ['Material', 'Labor', 'Equipment', 'Subcontractor'];
+    return {
+      id: numberValue(item.id, Date.now() + index),
+      name: textValue(item.name, `Item ${index + 1}`),
+      category: categories.includes(item.category) ? item.category : 'Material',
+      quantity: Math.max(0, numberValue(item.quantity)),
+      unit: textValue(item.unit, 'pcs'),
+      unitCost: Math.max(0, numberValue(item.unitCost))
+    };
+  }
+
+  function normalizeLog(log = {}, index = 0) {
+    return {
+      id: numberValue(log.id, Date.now() + index),
+      date: validDate(log.date),
+      project: textValue(log.project, 'Proyek tidak diketahui'),
+      author: textValue(log.author, 'Pengawas lapangan'),
+      summary: textValue(log.summary, 'Tidak ada ringkasan.'),
+      workers: Math.max(0, Math.round(numberValue(log.workers))),
+      safety: log.safety === 'WARNING' ? 'WARNING' : 'PASS',
+      safetyNote: textValue(log.safetyNote, log.safety === 'WARNING' ? 'Perlu tindak lanjut K3.' : ''),
+      photo: safeImageUrl(log.photo)
+    };
+  }
+
+  function normalizeNotification(notification = {}, index = 0) {
+    return {
+      id: numberValue(notification.id, Date.now() + index),
+      type: ['info', 'warning', 'success', 'error'].includes(notification.type) ? notification.type : 'info',
+      title: textValue(notification.title, 'Notifikasi'),
+      desc: textValue(notification.desc, ''),
+      time: textValue(notification.time, ''),
+      read: notification.read === true
+    };
+  }
+
+  const persistLocal = (k, v) => {
+    try {
+      localStorage.setItem('chub_' + k, JSON.stringify(v));
+      return true;
+    } catch (e) {
+      console.warn(`[Storage] Gagal menyimpan ${k}:`, e);
+      return false;
+    }
+  };
+  const save = (k, v, options = {}) => {
+    const saved = persistLocal(k, v);
+    if (saved && options.sync !== false && state.googleSheetUrl && ['projects', 'boq', 'logs'].includes(k)) {
+      queueGoogleSheetsPush();
+    }
+    return saved;
+  };
+
+  const loadedProjects = load('projects', DEFAULT_PROJECTS);
+  const loadedBoq = load('boq', DEFAULT_BOQ);
+  const loadedLogs = load('logs', DEFAULT_LOGS);
+  const loadedNotifs = load('notifs', NOTIFICATIONS);
+  const loadedUser = load('user', USERS[0]);
+  const loadedGoogleSheetUrl = load('googleSheetUrl', '');
+
   let state = {
-    projects: load('projects', DEFAULT_PROJECTS),
-    boq: load('boq', DEFAULT_BOQ),
-    logs: load('logs', DEFAULT_LOGS),
-    notifs: load('notifs', NOTIFICATIONS),
-    user: load('user', USERS[0]),
-    revenue: load('revenue', 30000000000),
-    budget: load('budget', 25500000000),
-    dark: load('dark', true),
-    googleSheetUrl: load('googleSheetUrl', ''),
+    projects: (Array.isArray(loadedProjects) ? loadedProjects : DEFAULT_PROJECTS).map(normalizeProject),
+    boq: (Array.isArray(loadedBoq) ? loadedBoq : DEFAULT_BOQ).map(normalizeBoqItem),
+    logs: (Array.isArray(loadedLogs) ? loadedLogs : DEFAULT_LOGS).map(normalizeLog),
+    notifs: (Array.isArray(loadedNotifs) ? loadedNotifs : clone(NOTIFICATIONS)).filter(item => item && typeof item === 'object').map(normalizeNotification),
+    user: USERS.find(user => user.id === loadedUser?.id) || USERS[0],
+    revenue: Math.max(0, numberValue(load('revenue', 30000000000), 30000000000)),
+    budget: Math.max(0, numberValue(load('budget', 25500000000), 25500000000)),
+    dark: load('dark', true) !== false,
+    googleSheetUrl: typeof loadedGoogleSheetUrl === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(loadedGoogleSheetUrl) ? loadedGoogleSheetUrl : '',
     syncing: false,
     tab: 'dashboard',
     detailId: null,
@@ -105,9 +215,23 @@
     showNotifs: false,
     showUserMenu: false,
     editingBoqId: null,
+    newBoqId: null,
+    lastSyncAt: null,
   };
 
   let deferredPWA = null;
+  let syncTimer = null;
+  let syncQueued = false;
+
+  // Non-destructive migration: preserve user data while normalizing the schema
+  try {
+    if (localStorage.getItem('chub_ver') !== DATA_VERSION) {
+      persistLocal('projects', state.projects);
+      persistLocal('boq', state.boq);
+      persistLocal('logs', state.logs);
+      localStorage.setItem('chub_ver', DATA_VERSION);
+    }
+  } catch (e) {}
 
   // Clear all localStorage and reset to 1 sample project
   function resetToSample() {
@@ -115,47 +239,71 @@
     localStorage.removeItem('chub_boq');
     localStorage.removeItem('chub_logs');
     localStorage.removeItem('chub_notifs');
-    state.projects = DEFAULT_PROJECTS;
-    state.boq = DEFAULT_BOQ;
-    state.logs = DEFAULT_LOGS;
-    state.notifs = NOTIFICATIONS;
-    save('projects', state.projects);
-    save('boq', state.boq);
-    save('logs', state.logs);
-    save('notifs', state.notifs);
+    state.projects = clone(DEFAULT_PROJECTS).map(normalizeProject);
+    state.boq = clone(DEFAULT_BOQ).map(normalizeBoqItem);
+    state.logs = clone(DEFAULT_LOGS).map(normalizeLog);
+    state.notifs = clone(NOTIFICATIONS);
+    save('projects', state.projects, { sync: false });
+    save('boq', state.boq, { sync: false });
+    save('logs', state.logs, { sync: false });
+    save('notifs', state.notifs, { sync: false });
+    queueGoogleSheetsPush();
   }
 
   // ==============================
   // GOOGLE SHEETS CLOUD SYNC ENGINE
   // ==============================
+  function queueGoogleSheetsPush() {
+    if (!state.googleSheetUrl) return;
+    syncQueued = true;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      syncTimer = null;
+      pushToGoogleSheets();
+    }, CLOUD_SYNC_DELAY);
+  }
+
   function pushToGoogleSheets() {
     if (!state.googleSheetUrl) return;
+    if (state.syncing) {
+      syncQueued = true;
+      return;
+    }
+    syncQueued = false;
     state.syncing = true;
     renderHeaderSyncStatus();
-    
+
     fetch(state.googleSheetUrl, {
       method: 'POST',
       mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         projects: state.projects,
-        boq: state.boq,
+        boq: state.newBoqId ? state.boq.filter(item => item.id !== state.newBoqId) : state.boq,
         siteLogs: state.logs,
         user: state.user.name
       })
     }).then(() => {
       state.syncing = false;
+      state.lastSyncAt = new Date();
       renderHeaderSyncStatus();
-      console.log('[GoogleSheets] Data pushed successfully');
+      console.log('[GoogleSheets] Data dikirim ke Apps Script');
     }).catch(err => {
       state.syncing = false;
       renderHeaderSyncStatus();
       console.warn('[GoogleSheets] Push error:', err);
+      toast('Data tersimpan lokal, tetapi pengiriman ke Google Drive gagal', 'warning');
+    }).finally(() => {
+      if (syncQueued) queueGoogleSheetsPush();
     });
   }
 
   function pullFromGoogleSheets() {
     if (!state.googleSheetUrl) return;
+    if (state.syncing) return toast('Sinkronisasi masih berlangsung', 'info');
+    clearTimeout(syncTimer);
+    syncTimer = null;
+    syncQueued = false;
     state.syncing = true;
     toast('Menghubungkan ke Google Drive...', 'info');
     renderHeaderSyncStatus();
@@ -164,24 +312,26 @@
       .then(res => res.json())
       .then(res => {
         state.syncing = false;
-        if (res && res.projects && res.projects.length) {
-          state.projects = res.projects;
-          save('projects', state.projects);
+        if (res && Array.isArray(res.projects) && res.projects.length) {
+          state.projects = res.projects.map(normalizeProject);
+          save('projects', state.projects, { sync: false });
         }
-        if (res && res.boq && res.boq.length) {
-          state.boq = res.boq;
-          save('boq', state.boq);
+        if (res && Array.isArray(res.boq) && res.boq.length) {
+          state.boq = res.boq.map(normalizeBoqItem);
+          save('boq', state.boq, { sync: false });
         }
-        if (res && res.siteLogs && res.siteLogs.length) {
-          state.logs = res.siteLogs;
-          save('logs', state.logs);
+        if (res && Array.isArray(res.siteLogs) && res.siteLogs.length) {
+          state.logs = res.siteLogs.map(normalizeLog);
+          save('logs', state.logs, { sync: false });
         }
-        toast('Selesai! Data terbaru ditarik dari Google Drive 📁', 'success');
+        state.lastSyncAt = new Date();
+        toast('Data terbaru berhasil ditarik dari Google Drive', 'success');
         render();
       })
       .catch(err => {
         state.syncing = false;
         renderHeaderSyncStatus();
+        console.warn('[GoogleSheets] Pull error:', err);
         toast('Gagal menarik dari Google Drive (Cek URL Script)', 'warning');
       });
   }
@@ -212,6 +362,39 @@
     if (n >= 1e9) return `Rp ${(n / 1e9).toFixed(1)} M`;
     if (n >= 1e6) return `Rp ${(n / 1e6).toFixed(1)} Jt`;
     return fmtIDR(n);
+  };
+  const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[char]);
+  const formatDate = value => {
+    const safe = validDate(value, '');
+    if (!safe) return '-';
+    return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${safe}T00:00:00Z`));
+  };
+  const daysUntil = value => {
+    const target = new Date(`${validDate(value)}T00:00:00Z`);
+    const today = new Date(`${todayISO()}T00:00:00Z`);
+    return Math.round((target - today) / 86400000);
+  };
+  const deadlineMeta = project => {
+    if (project.status === 'Completed') return { label: 'Selesai', className: 'badge-success', icon: 'check-circle', days: 0 };
+    const days = daysUntil(project.dueDate);
+    if (days < 0) return { label: `Terlambat ${Math.abs(days)} hari`, className: 'badge-danger', icon: 'calendar-x', days };
+    if (days <= 30) return { label: `${days} hari lagi`, className: 'badge-warning', icon: 'clock-3', days };
+    return { label: `${days} hari lagi`, className: 'badge-info', icon: 'calendar-clock', days };
+  };
+  const csvCell = value => {
+    let text = String(value ?? '');
+    if (/^[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const isValidGoogleScriptUrl = value => {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && url.hostname === 'script.google.com' && /\/macros\/s\/.+\/exec$/.test(url.pathname);
+    } catch (e) {
+      return false;
+    }
   };
   const hasPerm = p => (PERMS[state.user.role] || []).includes(p);
   const unreadCount = () => state.notifs.filter(n => !n.read).length;
@@ -253,7 +436,16 @@
   }
 
   // PWA install
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPWA = e; });
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPWA = e;
+    if (document.getElementById('app-root')) render();
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredPWA = null;
+    toast('Construction Hub berhasil diinstal', 'success');
+    render();
+  });
 
   // ==============================
   // RENDER CORE
@@ -297,7 +489,7 @@
           <div class="hidden sm:block">
             <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
               CONSTRUCTION HUB
-              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.2</span>
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.3</span>
             </h1>
             <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
@@ -360,9 +552,9 @@
               <div class="p-4 flex items-start gap-3 ${n.read ? 'opacity-60' : ''} hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                 <div class="${col} mt-0.5"><i data-lucide="${ic}" class="w-4 h-4"></i></div>
                 <div class="flex-1 min-w-0">
-                  <p class="text-xs font-bold">${n.title}</p>
-                  <p class="text-[11px] text-slate-500 mt-0.5">${n.desc}</p>
-                  <p class="text-[10px] text-slate-400 mt-1">${n.time}</p>
+                  <p class="text-xs font-bold">${escapeHTML(n.title)}</p>
+                  <p class="text-[11px] text-slate-500 mt-0.5">${escapeHTML(n.desc)}</p>
+                  <p class="text-[10px] text-slate-400 mt-1">${escapeHTML(n.time)}</p>
                 </div>
                 ${!n.read ? '<div class="w-2 h-2 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>' : ''}
               </div>
@@ -411,13 +603,19 @@
   function dashboardHTML(c) {
     const totalProjects = state.projects.length;
     const completedProjects = state.projects.filter(p => p.status === 'Completed').length;
+    const overdueProjects = state.projects.filter(p => p.status !== 'Completed' && daysUntil(p.dueDate) < 0);
+    const dueSoonProjects = state.projects.filter(p => p.status !== 'Completed' && daysUntil(p.dueDate) >= 0 && daysUntil(p.dueDate) <= 30);
+    const warningLogs = state.logs.filter(log => log.safety === 'WARNING');
+    const todayLogs = state.logs.filter(log => log.date === todayISO());
+    const workersToday = todayLogs.reduce((total, log) => total + log.workers, 0);
+    const latestWarning = [...warningLogs].sort((a, b) => b.date.localeCompare(a.date))[0];
     return `
     <div class="space-y-6 animate-fade-in">
       <!-- Greeting -->
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
           <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Dashboard Overview</p>
-          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">Selamat ${new Date().getHours() < 12 ? 'Pagi' : new Date().getHours() < 17 ? 'Siang' : 'Malam'}, ${state.user.name.split(' ')[0]} 👋</h2>
+          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">Selamat ${new Date().getHours() < 12 ? 'Pagi' : new Date().getHours() < 17 ? 'Siang' : 'Malam'}, ${escapeHTML(state.user.name.split(' ')[0])} 👋</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Berikut ringkasan portofolio konstruksi Anda hari ini.</p>
         </div>
         <div class="flex gap-2 flex-wrap">
@@ -460,39 +658,41 @@
           </div>
         </div>
 
-        <!-- Weather & Risk -->
+        <!-- Operational pulse: sourced from actual project and site-log data -->
         <div class="lg:col-span-2 card-gradient-blue rounded-2xl p-6 flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-300">Live Weather & Safety</span>
-              <i data-lucide="cloud-sun" class="w-5 h-5 text-amber-400"></i>
+              <span class="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-300">Operational Pulse</span>
+              <i data-lucide="shield-check" class="w-5 h-5 text-emerald-300"></i>
             </div>
-            <h4 class="text-lg font-black mt-3">Monitor Cuaca Proyek</h4>
-            <p class="text-xs text-indigo-200/70 mt-1">Deteksi dini risiko cuaca lapangan real-time.</p>
+            <h4 class="text-lg font-black mt-3">K3 & Tenggat Proyek</h4>
+            <p class="text-xs text-indigo-200/70 mt-1">Ringkasan langsung dari log lapangan dan jadwal proyek.</p>
           </div>
-          <div class="space-y-2.5 my-4">
-            ${state.projects.map(p => `
-              <div class="p-3 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                  <p class="text-xs font-bold truncate">${p.name}</p>
-                  <p class="text-[10px] text-indigo-200/70 flex items-center gap-1 mt-0.5"><i data-lucide="map-pin" class="w-3 h-3 text-cyan-400"></i>${p.location}</p>
-                </div>
-                <div class="text-right shrink-0">
-                  <div class="flex items-center gap-1 justify-end">
-                    <i data-lucide="${p.weather.icon}" class="w-3.5 h-3.5 ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-400' : 'text-emerald-400'}"></i>
-                    <span class="text-xs font-bold">${p.weather.temp}°C</span>
-                  </div>
-                  <p class="text-[9px] ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-300' : 'text-emerald-300'} font-semibold">${p.weather.condition}</p>
-                </div>
-              </div>
-            `).join('')}
+          <div class="grid grid-cols-3 gap-2 my-4">
+            <button class="tab-btn p-3 rounded-xl bg-white/10 border border-white/10 text-left hover:bg-white/15 transition-all" data-tab="sitelog">
+              <span class="text-[9px] text-indigo-200/70 font-bold uppercase">Warning K3</span>
+              <p class="text-xl font-black mt-1">${warningLogs.length}</p>
+            </button>
+            <button class="tab-btn p-3 rounded-xl bg-white/10 border border-white/10 text-left hover:bg-white/15 transition-all" data-tab="projects">
+              <span class="text-[9px] text-indigo-200/70 font-bold uppercase">Tenggat ≤30 hari</span>
+              <p class="text-xl font-black mt-1">${dueSoonProjects.length}</p>
+            </button>
+            <div class="p-3 rounded-xl bg-white/10 border border-white/10">
+              <span class="text-[9px] text-indigo-200/70 font-bold uppercase">Pekerja Hari Ini</span>
+              <p class="text-xl font-black mt-1">${workersToday}</p>
+            </div>
           </div>
-          ${state.projects.some(p => p.weather.alert) ? `
+          ${overdueProjects.length ? `
             <div class="p-3 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center gap-2 text-xs">
               <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
-              <span class="font-bold text-amber-200">${state.projects.find(p => p.weather.alert)?.weather.alert}</span>
+              <span class="font-bold text-amber-200">${overdueProjects.length} proyek melewati target penyelesaian.</span>
             </div>
-          ` : '<div class="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center gap-2 text-xs"><i data-lucide="shield-check" class="w-4 h-4 text-emerald-300"></i><span class="font-bold text-emerald-200">Aman untuk bekerja</span></div>'}
+          ` : latestWarning ? `
+            <div class="p-3 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center gap-2 text-xs">
+              <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400 shrink-0"></i>
+              <span class="font-bold text-amber-200 truncate">Tindak lanjut K3: ${escapeHTML(latestWarning.project)}</span>
+            </div>
+          ` : '<div class="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center gap-2 text-xs"><i data-lucide="shield-check" class="w-4 h-4 text-emerald-300"></i><span class="font-bold text-emerald-200">Tidak ada peringatan K3 aktif</span></div>'}
         </div>
       </div>
 
@@ -511,15 +711,15 @@
               ${state.projects.map(p => {
                 const h = health(p);
                 return `<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
-                  <td class="p-4"><p class="font-bold text-slate-900 dark:text-white">${p.name}</p><p class="text-[10px] text-slate-400 mt-0.5">${p.location}</p></td>
-                  <td class="p-4 hidden sm:table-cell font-medium text-slate-600 dark:text-slate-300">${p.manager}</td>
+                  <td class="p-4"><p class="font-bold text-slate-900 dark:text-white">${escapeHTML(p.name)}</p><p class="text-[10px] text-slate-400 mt-0.5">${escapeHTML(p.location)}</p></td>
+                  <td class="p-4 hidden sm:table-cell font-medium text-slate-600 dark:text-slate-300">${escapeHTML(p.manager)}</td>
                   <td class="p-4 font-bold">${fmtShort(p.budget)}</td>
                   <td class="p-4 font-bold hidden md:table-cell">${fmtShort(p.spent)}</td>
                   <td class="p-4"><div class="flex items-center gap-2"><div class="w-16 sm:w-24 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden"><div class="bg-indigo-500 h-full rounded-full" style="width:${p.completion}%"></div></div><span class="font-black text-xs">${p.completion}%</span></div></td>
                   <td class="p-4"><span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span></td>
                   <td class="p-4 text-right"><button class="open-detail text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:underline" data-id="${p.id}">Lihat →</button></td>
                 </tr>`;
-              }).join('')}
+              }).join('') || '<tr><td colspan="7" class="p-10 text-center text-slate-400">Belum ada proyek. Tambahkan proyek pertama Anda.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -582,31 +782,28 @@
   // 2. PROJECTS
   // ==============================
   function projectsHTML() {
-    const q = state.search.toLowerCase();
-    const filtered = state.projects.filter(p =>
-      p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q) || p.manager.toLowerCase().includes(q)
-    );
     return `
     <div class="space-y-6 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Project Management</p>
           <h2 class="text-2xl font-black tracking-tight">Proyek Konstruksi (${state.projects.length})</h2>
+          <p id="project-result-count" class="text-xs text-slate-400 mt-1"></p>
         </div>
         <div class="flex items-center gap-3">
           <div class="relative flex-1 sm:w-60">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
-            <input id="search-input" type="text" value="${state.search}" placeholder="Cari proyek / lokasi / PM..." class="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"/>
+            <input id="search-input" type="search" value="${escapeHTML(state.search)}" placeholder="Cari proyek / lokasi / PM..." autocomplete="off" class="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"/>
           </div>
           ${hasPerm('edit_projects') ? `<button id="add-project-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25 transition-all shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Tambah</button>` : ''}
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        ${filtered.map((p, i) => {
+        ${state.projects.map((p, i) => {
           const h = health(p);
           return `
-          <div class="card p-0 animate-slide-up" style="animation-delay: ${i * 80}ms; animation-fill-mode: both">
+          <div class="project-card card p-0 animate-slide-up" data-search="${encodeURIComponent(`${p.name} ${p.location} ${p.manager}`.toLowerCase())}" style="animation-delay: ${i * 80}ms; animation-fill-mode: both">
             <!-- Card Top Gradient -->
             <div class="h-2 bg-gradient-to-r ${p.status === 'Completed' ? 'from-emerald-500 to-teal-500' : p.status === 'In Progress' ? 'from-indigo-500 to-violet-500' : 'from-slate-400 to-slate-500'}"></div>
             <div class="p-5 space-y-4">
@@ -615,8 +812,8 @@
                 <span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span>
               </div>
               <div>
-                <h3 class="text-base font-black hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer open-detail transition-colors" data-id="${p.id}">${p.name}</h3>
-                <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-indigo-500"></i>${p.location}</p>
+                <h3 class="text-base font-black hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer open-detail transition-colors" data-id="${p.id}">${escapeHTML(p.name)}</h3>
+                <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-indigo-500"></i>${escapeHTML(p.location)}</p>
               </div>
               <div class="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl space-y-2.5 border border-slate-100 dark:border-slate-700/30">
                 <div class="flex justify-between text-xs"><span class="text-slate-400">Budget</span><span class="font-bold">${fmtShort(p.budget)}</span></div>
@@ -629,14 +826,35 @@
                 </div>
               </div>
               <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i>${p.manager}</span>
+                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i>${escapeHTML(p.manager)}</span>
                 <button class="open-detail bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg transition-all text-[11px]" data-id="${p.id}">Detail & Gantt →</button>
               </div>
             </div>
           </div>`;
         }).join('')}
+        <div id="project-empty-state" class="hidden md:col-span-2 xl:col-span-3 card p-10 text-center">
+          <i data-lucide="search-x" class="w-10 h-10 mx-auto text-slate-300 mb-3"></i>
+          <p class="font-bold text-slate-600 dark:text-slate-300">Proyek tidak ditemukan</p>
+          <p class="text-xs text-slate-400 mt-1">Coba kata kunci nama, lokasi, atau project manager lain.</p>
+        </div>
       </div>
     </div>`;
+  }
+
+  function applyProjectSearch() {
+    const query = state.search.trim().toLowerCase();
+    const cards = [...document.querySelectorAll('.project-card')];
+    let visible = 0;
+    cards.forEach(card => {
+      let haystack = '';
+      try { haystack = decodeURIComponent(card.dataset.search || ''); } catch (e) {}
+      const matches = !query || haystack.includes(query);
+      card.classList.toggle('hidden', !matches);
+      if (matches) visible += 1;
+    });
+    document.getElementById('project-empty-state')?.classList.toggle('hidden', visible > 0);
+    const count = document.getElementById('project-result-count');
+    if (count) count.textContent = query ? `${visible} dari ${state.projects.length} proyek ditampilkan` : `${visible} proyek ditampilkan`;
   }
 
   // ==============================
@@ -646,6 +864,9 @@
     const p = state.projects.find(x => x.id === state.detailId);
     if (!p) return '<p class="text-center py-16 text-slate-500">Proyek tidak ditemukan.</p>';
     const h = health(p);
+    const deadline = deadlineMeta(p);
+    const projectLogs = state.logs.filter(log => log.project === p.name).sort((a, b) => b.date.localeCompare(a.date));
+    const latestLog = projectLogs[0];
     const maxCF = Math.max(...(p.cashflow || []).map(cf => Math.max(cf.budgeted, cf.actual)), 1);
     return `
     <div class="space-y-6 animate-fade-in">
@@ -659,15 +880,21 @@
             <div>
               <div class="flex items-center gap-2 flex-wrap mb-2">
                 <span class="badge ${h.badge}"><i data-lucide="${h.icon}" class="w-3 h-3"></i>${h.t}</span>
-                <span class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i>Jatuh Tempo: ${p.dueDate}</span>
+                <span class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i>Jatuh Tempo: ${formatDate(p.dueDate)}</span>
               </div>
-              <h2 class="text-xl sm:text-2xl font-black">${p.name}</h2>
+              <h2 class="text-xl sm:text-2xl font-black">${escapeHTML(p.name)}</h2>
               <p class="text-xs text-slate-500 mt-1 flex items-center gap-3 flex-wrap">
-                <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-500"></i>${p.location}</span>
-                <span class="flex items-center gap-1"><i data-lucide="user" class="w-3.5 h-3.5 text-emerald-500"></i>PM: ${p.manager}</span>
+                <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-500"></i>${escapeHTML(p.location)}</span>
+                <span class="flex items-center gap-1"><i data-lucide="user" class="w-3.5 h-3.5 text-emerald-500"></i>PM: ${escapeHTML(p.manager)}</span>
               </p>
             </div>
             <div class="flex items-center gap-3">
+              ${hasPerm('edit_projects') ? `
+                <div class="flex flex-col gap-2 no-print">
+                  <button id="edit-project-btn" class="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold hover:bg-indigo-500/20 transition-all flex items-center gap-1.5"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i>Edit</button>
+                  <button id="delete-project-btn" class="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[11px] font-bold hover:bg-rose-500/20 transition-all flex items-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Hapus</button>
+                </div>
+              ` : ''}
               <!-- Completion ring -->
               <div class="relative w-16 h-16">
                 <svg class="w-16 h-16" viewBox="0 0 36 36">
@@ -712,18 +939,18 @@
             ${p.phases.map(ph => `
               <div class="gantt-row">
                 <div>
-                  <h4 class="text-xs font-bold">${ph.name}</h4>
+                  <h4 class="text-xs font-bold">${escapeHTML(ph.name)}</h4>
                   <p class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                    <i data-lucide="calendar" class="w-3 h-3"></i>${ph.start} → ${ph.end}
+                    <i data-lucide="calendar" class="w-3 h-3"></i>${formatDate(ph.start)} → ${formatDate(ph.end)}
                   </p>
                 </div>
                 <div>
                   <div class="flex items-center justify-between text-xs mb-1.5">
-                    <span class="badge ${ph.progress === 100 ? 'badge-success' : ph.progress > 0 ? 'badge-info' : 'badge-neutral'}">${ph.status}</span>
-                    <span class="font-black">${ph.progress}%</span>
+                    <span class="phase-status-badge badge ${ph.progress === 100 ? 'badge-success' : ph.progress > 0 ? 'badge-info' : 'badge-neutral'}">${ph.status}</span>
+                    <span class="phase-progress-value font-black">${ph.progress}%</span>
                   </div>
                   <div class="gantt-track">
-                    <div class="gantt-bar ${ph.progress === 100 ? 'completed' : ph.progress > 0 ? 'in-progress' : 'pending'}" style="width:${Math.max(ph.progress, 2)}%">
+                    <div class="phase-progress-bar gantt-bar ${ph.progress === 100 ? 'completed' : ph.progress > 0 ? 'in-progress' : 'pending'}" style="width:${Math.max(ph.progress, 2)}%">
                       ${ph.progress >= 25 ? ph.progress + '%' : ''}
                     </div>
                   </div>
@@ -747,7 +974,7 @@
                     <div class="cashflow-bar bg-indigo-500/30 dark:bg-indigo-500/20" style="height: ${(cf.budgeted / maxCF) * 100}%" data-value="Rencana: ${fmtShort(cf.budgeted)}"></div>
                     <div class="cashflow-bar bg-indigo-500" style="height: ${(cf.actual / maxCF) * 100}%" data-value="Aktual: ${fmtShort(cf.actual)}"></div>
                   </div>
-                  <span class="text-[10px] font-bold text-slate-500">${cf.month}</span>
+                  <span class="text-[10px] font-bold text-slate-500">${escapeHTML(cf.month)}</span>
                 </div>
               `).join('')}
             </div>
@@ -759,16 +986,24 @@
         </div>
       </div>
 
-      <!-- Weather Card -->
-      <div class="card p-5 flex flex-col sm:flex-row items-center gap-4">
-        <div class="p-3 rounded-xl ${p.weather.rainRisk === 'Tinggi' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}">
-          <i data-lucide="${p.weather.icon}" class="w-8 h-8"></i>
+      <!-- Project controls from schedule and site logs -->
+      <div class="card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="flex items-center gap-3">
+          <div class="p-3 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><i data-lucide="calendar-clock" class="w-7 h-7"></i></div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Kontrol Tenggat</p>
+            <h4 class="text-sm font-black mt-0.5">${formatDate(p.dueDate)}</h4>
+            <span class="badge ${deadline.className} mt-1"><i data-lucide="${deadline.icon}" class="w-3 h-3"></i>${deadline.label}</span>
+          </div>
         </div>
-        <div class="flex-1 text-center sm:text-left">
-          <h4 class="text-sm font-bold">Kondisi Cuaca: ${p.weather.condition} (${p.weather.temp}°C)</h4>
-          <p class="text-xs text-slate-500 mt-0.5">Tingkat Risiko Hujan: <span class="font-bold ${p.weather.rainRisk === 'Tinggi' ? 'text-amber-500' : 'text-emerald-500'}">${p.weather.rainRisk}</span></p>
+        <div class="flex items-center gap-3 sm:border-l sm:border-slate-100 dark:sm:border-slate-800 sm:pl-4">
+          <div class="p-3 rounded-xl ${latestLog?.safety === 'WARNING' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}"><i data-lucide="${latestLog?.safety === 'WARNING' ? 'shield-alert' : 'shield-check'}" class="w-7 h-7"></i></div>
+          <div>
+            <p class="text-[10px] font-bold uppercase text-slate-400">Inspeksi K3 Terakhir</p>
+            <h4 class="text-sm font-black mt-0.5">${latestLog ? formatDate(latestLog.date) : 'Belum ada laporan'}</h4>
+            <p class="text-xs text-slate-500 mt-1">${latestLog ? `${latestLog.workers} pekerja • K3 ${latestLog.safety}` : 'Tambahkan log lapangan untuk memulai pemantauan.'}</p>
+          </div>
         </div>
-        ${p.weather.alert ? `<div class="badge badge-warning shrink-0"><i data-lucide="alert-triangle" class="w-3 h-3"></i>${p.weather.alert}</div>` : `<div class="badge badge-success shrink-0"><i data-lucide="shield-check" class="w-3 h-3"></i>Aman untuk bekerja</div>`}
       </div>
     </div>`;
   }
@@ -860,29 +1095,30 @@
                 return `
                 <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors ${isEditing ? 'ring-2 ring-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10' : ''}">
                   <td class="p-4 font-bold max-w-[200px]">
-                    ${isEditing ? `<input class="inline-edit boq-edit-field font-bold" data-id="${item.id}" data-field="name" value="${item.name}"/>` : item.name}
+                    ${isEditing ? `<input class="inline-edit boq-edit-field font-bold" data-id="${item.id}" data-field="name" value="${escapeHTML(item.name)}" required/>` : escapeHTML(item.name)}
                   </td>
-                  <td class="p-4"><span class="badge ${catBadge}">${item.category}</span></td>
-                  <td class="p-4 font-bold">
-                    ${isEditing ? `<input type="number" class="inline-edit boq-edit-field font-bold w-20" data-id="${item.id}" data-field="quantity" value="${item.quantity}"/>` : item.quantity.toLocaleString('id-ID')}
+                  <td class="p-4">
+                    ${isEditing ? `<select class="inline-edit boq-edit-field font-bold" data-id="${item.id}" data-field="category">${['Material', 'Labor', 'Equipment', 'Subcontractor'].map(category => `<option value="${category}" ${category === item.category ? 'selected' : ''}>${category}</option>`).join('')}</select>` : `<span class="badge ${catBadge}">${escapeHTML(item.category)}</span>`}
                   </td>
-                  <td class="p-4 text-slate-500">${item.unit}</td>
                   <td class="p-4 font-bold">
-                    ${isEditing ? `<input type="number" class="inline-edit boq-edit-field font-bold w-32" data-id="${item.id}" data-field="unitCost" value="${item.unitCost}"/>` : fmtIDR(item.unitCost)}
+                    ${isEditing ? `<input type="number" min="0" step="any" class="inline-edit boq-edit-field font-bold w-20" data-id="${item.id}" data-field="quantity" value="${item.quantity}"/>` : item.quantity.toLocaleString('id-ID')}
+                  </td>
+                  <td class="p-4 text-slate-500">${isEditing ? `<input class="inline-edit boq-edit-field font-bold w-20" data-id="${item.id}" data-field="unit" value="${escapeHTML(item.unit)}"/>` : escapeHTML(item.unit)}</td>
+                  <td class="p-4 font-bold">
+                    ${isEditing ? `<input type="number" min="0" step="any" class="inline-edit boq-edit-field font-bold w-32" data-id="${item.id}" data-field="unitCost" value="${item.unitCost}"/>` : fmtIDR(item.unitCost)}
                   </td>
                   <td class="p-4 font-black text-indigo-600 dark:text-indigo-400">${fmtIDR(t)}</td>
                   ${hasPerm('edit_boq') ? `
                     <td class="p-4 text-right flex items-center justify-end gap-1">
-                      <button class="boq-edit-btn p-2 rounded-lg ${isEditing ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600'} transition-all" data-id="${item.id}">
+                      <button class="boq-edit-btn p-2 rounded-lg ${isEditing ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600'} transition-all" data-id="${item.id}" aria-label="${isEditing ? 'Simpan item' : 'Edit item'}">
                         <i data-lucide="${isEditing ? 'check' : 'edit-2'}" class="w-4 h-4"></i>
                       </button>
-                      <button class="boq-del-btn p-2 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/30 text-slate-400 hover:text-rose-600 transition-all" data-id="${item.id}">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                      </button>
+                      ${isEditing ? `<button class="boq-cancel-btn p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-all" data-id="${item.id}" aria-label="Batal edit"><i data-lucide="x" class="w-4 h-4"></i></button>` : ''}
+                      <button class="boq-del-btn p-2 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/30 text-slate-400 hover:text-rose-600 transition-all" data-id="${item.id}" aria-label="Hapus item"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </td>
                   ` : ''}
                 </tr>`;
-              }).join('')}
+              }).join('') || `<tr><td colspan="7" class="p-10 text-center text-slate-400">${state.boq.length ? 'Tidak ada item pada kategori ini.' : 'Belum ada item RAB.'}</td></tr>`}
             </tbody>
             <tfoot class="bg-slate-50 dark:bg-slate-800/30 border-t-2 border-indigo-500/30">
               <tr>
@@ -916,28 +1152,29 @@
         ${state.logs.map((log, i) => `
           <div class="card p-0 overflow-hidden animate-slide-up" style="animation-delay: ${i * 100}ms; animation-fill-mode: both">
             <div class="h-52 w-full overflow-hidden relative group">
-              <img src="${log.photo}" alt="${log.project}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy"/>
+              <img src="${escapeHTML(log.photo)}" alt="${escapeHTML(log.project)}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy"/>
               <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
               <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                <i data-lucide="calendar" class="w-3 h-3 text-cyan-400"></i>${log.date}
+                <i data-lucide="calendar" class="w-3 h-3 text-cyan-400"></i>${formatDate(log.date)}
               </div>
               <div class="absolute bottom-3 right-3">
                 <span class="badge ${log.safety === 'PASS' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}" style="font-size: 0.6rem">
                   <i data-lucide="${log.safety === 'PASS' ? 'shield-check' : 'shield-alert'}" class="w-3 h-3"></i>K3: ${log.safety}
                 </span>
               </div>
-              <h3 class="absolute bottom-3 left-3 text-white font-black text-sm drop-shadow-lg">${log.project}</h3>
+              <h3 class="absolute bottom-3 left-3 text-white font-black text-sm drop-shadow-lg">${escapeHTML(log.project)}</h3>
             </div>
             <div class="p-5 space-y-3">
-              <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${log.summary}</p>
+              <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHTML(log.summary)}</p>
+              ${log.safetyNote ? `<div class="p-3 rounded-xl ${log.safety === 'WARNING' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'} text-[11px] flex items-start gap-2"><i data-lucide="${log.safety === 'WARNING' ? 'triangle-alert' : 'clipboard-check'}" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${escapeHTML(log.safetyNote)}</span></div>` : ''}
               <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="cloud" class="w-3 h-3 text-cyan-500"></i>${log.weather}</span>
                 <span class="text-slate-400 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-indigo-500"></i>${log.workers} Pekerja</span>
+                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="hard-hat" class="w-3 h-3 text-amber-500"></i>K3 ${log.safety}</span>
               </div>
-              <p class="text-[10px] text-slate-400">Pengawas: <span class="font-bold text-slate-600 dark:text-slate-300">${log.author}</span></p>
+              <p class="text-[10px] text-slate-400">Pengawas: <span class="font-bold text-slate-600 dark:text-slate-300">${escapeHTML(log.author)}</span></p>
             </div>
           </div>
-        `).join('')}
+        `).join('') || '<div class="md:col-span-2 xl:col-span-3 card p-10 text-center text-slate-400">Belum ada laporan lapangan.</div>'}
       </div>
     </div>`;
   }
@@ -1008,6 +1245,7 @@
 
     // Reset sample button
     document.getElementById('reset-sample-btn')?.addEventListener('click', () => {
+      if (!window.confirm('Reset akan mengganti data proyek, RAB, dan log lokal dengan data sampel. Lanjutkan?')) return;
       resetToSample();
       toast('Data direset menjadi 1 proyek sampel', 'info');
       render();
@@ -1019,6 +1257,11 @@
 
     // Tab navigation
     document.querySelectorAll('.tab-btn, .mobile-nav-item').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.tab !== 'boq' && state.newBoqId) state.boq = state.boq.filter(item => item.id !== state.newBoqId);
+      if (b.dataset.tab !== 'boq') {
+        state.editingBoqId = null;
+        state.newBoqId = null;
+      }
       state.tab = b.dataset.tab;
       state.showNotifs = false;
       render();
@@ -1031,18 +1274,18 @@
     document.getElementById('notif-btn')?.addEventListener('click', (e) => { e.stopPropagation(); state.showNotifs = !state.showNotifs; render(); });
     document.getElementById('mark-all-read')?.addEventListener('click', () => { state.notifs.forEach(n => n.read = true); save('notifs', state.notifs); render(); });
 
-    // Close notification on outside click
-    document.addEventListener('click', (e) => {
-      if (state.showNotifs && !e.target.closest('#notif-btn') && !e.target.closest('#notif-dropdown')) {
-        state.showNotifs = false; render();
-      }
-    }, { once: true });
-
     // PWA install
     document.getElementById('pwa-btn')?.addEventListener('click', () => { if (deferredPWA) { deferredPWA.prompt(); deferredPWA = null; } });
 
     // User menu -> PAM tab
-    document.getElementById('user-btn')?.addEventListener('click', () => { state.tab = 'pam'; state.showNotifs = false; render(); });
+    document.getElementById('user-btn')?.addEventListener('click', () => {
+      if (state.newBoqId) state.boq = state.boq.filter(item => item.id !== state.newBoqId);
+      state.editingBoqId = null;
+      state.newBoqId = null;
+      state.tab = 'pam';
+      state.showNotifs = false;
+      render();
+    });
 
     // Open project detail
     document.querySelectorAll('.open-detail').forEach(b => b.addEventListener('click', () => {
@@ -1053,11 +1296,16 @@
     document.getElementById('back-btn')?.addEventListener('click', () => { state.tab = 'projects'; render(); });
 
     // Search
-    document.getElementById('search-input')?.addEventListener('input', e => { state.search = e.target.value; render(); });
+    document.getElementById('search-input')?.addEventListener('input', e => {
+      state.search = e.target.value;
+      applyProjectSearch();
+    });
+    applyProjectSearch();
 
     // Phase slider
-    document.querySelectorAll('.phase-slider').forEach(s => s.addEventListener('input', e => {
-      const pId = parseInt(s.dataset.project), phId = parseInt(s.dataset.phase), val = parseInt(e.target.value);
+    document.querySelectorAll('.phase-slider').forEach(s => {
+      const updatePhase = e => {
+      const pId = parseInt(s.dataset.project), phId = parseInt(s.dataset.phase), val = clamp(e.target.value, 0, 100);
       const proj = state.projects.find(p => p.id === pId);
       if (!proj) return;
       const ph = proj.phases.find(x => x.id === phId);
@@ -1067,27 +1315,65 @@
       proj.completion = Math.round(proj.phases.reduce((a, x) => a + x.progress, 0) / proj.phases.length);
       if (proj.completion === 100) proj.status = 'Completed';
       else if (proj.completion > 0) proj.status = 'In Progress';
-      save('projects', state.projects);
+      else proj.status = 'Planning';
+      const row = s.closest('.gantt-row');
+      const value = row?.querySelector('.phase-progress-value');
+      const bar = row?.querySelector('.phase-progress-bar');
+      const badge = row?.querySelector('.phase-status-badge');
+      if (value) value.textContent = `${val}%`;
+      if (bar) {
+        bar.style.width = `${Math.max(val, 2)}%`;
+        bar.textContent = val >= 25 ? `${val}%` : '';
+        bar.classList.toggle('completed', val === 100);
+        bar.classList.toggle('in-progress', val > 0 && val < 100);
+        bar.classList.toggle('pending', val === 0);
+      }
+      if (badge) {
+        badge.textContent = ph.status;
+        badge.className = `phase-status-badge badge ${val === 100 ? 'badge-success' : val > 0 ? 'badge-info' : 'badge-neutral'}`;
+      }
+      };
+      s.addEventListener('input', updatePhase);
+      s.addEventListener('change', e => {
+        updatePhase(e);
+        save('projects', state.projects);
+        render();
+      });
+    });
+
+    // BOQ category filter
+    document.querySelectorAll('.boq-cat-btn').forEach(b => b.addEventListener('click', () => {
+      if (state.editingBoqId) return toast('Simpan atau batalkan item yang sedang diedit', 'warning');
+      state.boqFilter = b.dataset.cat;
       render();
     }));
 
-    // BOQ category filter
-    document.querySelectorAll('.boq-cat-btn').forEach(b => b.addEventListener('click', () => { state.boqFilter = b.dataset.cat; render(); }));
-
     // BOQ sort
-    document.getElementById('boq-sort')?.addEventListener('change', e => { state.boqSort = e.target.value; render(); });
+    document.getElementById('boq-sort')?.addEventListener('change', e => {
+      if (state.editingBoqId) return toast('Simpan atau batalkan item yang sedang diedit', 'warning');
+      state.boqSort = e.target.value;
+      render();
+    });
 
     // BOQ inline edit toggle
     document.querySelectorAll('.boq-edit-btn').forEach(b => b.addEventListener('click', () => {
       const id = parseInt(b.dataset.id);
       if (state.editingBoqId === id) {
+        const item = state.boq.find(x => x.id === id);
+        if (!item) return;
+        let valid = true;
         document.querySelectorAll(`.boq-edit-field[data-id="${id}"]`).forEach(inp => {
-          const field = inp.dataset.field, val = inp.value;
-          const item = state.boq.find(x => x.id === id);
-          if (item) item[field] = field === 'name' ? val : parseFloat(val) || 0;
+          const field = inp.dataset.field;
+          const value = inp.value.trim();
+          if ((field === 'name' || field === 'unit') && !value) valid = false;
+          if (field === 'quantity' || field === 'unitCost') item[field] = Math.max(0, numberValue(value));
+          else item[field] = value;
         });
+        if (!valid) return toast('Nama item dan satuan wajib diisi', 'warning');
+        Object.assign(item, normalizeBoqItem(item));
         save('boq', state.boq);
         state.editingBoqId = null;
+        state.newBoqId = null;
         toast('Item RAB berhasil diperbarui', 'success');
       } else {
         state.editingBoqId = id;
@@ -1095,10 +1381,22 @@
       render();
     }));
 
+    document.querySelectorAll('.boq-cancel-btn').forEach(b => b.addEventListener('click', () => {
+      const id = parseInt(b.dataset.id);
+      if (state.newBoqId === id) state.boq = state.boq.filter(item => item.id !== id);
+      state.editingBoqId = null;
+      state.newBoqId = null;
+      render();
+    }));
+
     // BOQ delete
     document.querySelectorAll('.boq-del-btn').forEach(b => b.addEventListener('click', () => {
       const id = parseInt(b.dataset.id);
+      const item = state.boq.find(x => x.id === id);
+      if (!item || !window.confirm(`Hapus item RAB "${item.name}"?`)) return;
       state.boq = state.boq.filter(x => x.id !== id);
+      if (state.editingBoqId === id) state.editingBoqId = null;
+      if (state.newBoqId === id) state.newBoqId = null;
       save('boq', state.boq);
       toast('Item RAB dihapus', 'success');
       render();
@@ -1106,20 +1404,26 @@
 
     // Add BOQ item
     document.getElementById('add-boq-btn')?.addEventListener('click', () => {
-      state.boq.push({ id: Date.now(), name: 'Item Baru', category: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 });
-      state.editingBoqId = state.boq[state.boq.length - 1].id;
-      save('boq', state.boq);
+      const item = { id: Date.now(), name: 'Item Baru', category: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 };
+      state.boq.push(item);
+      state.editingBoqId = item.id;
+      state.newBoqId = item.id;
+      state.boqFilter = 'All';
       render();
     });
 
     // Export CSV
     document.getElementById('csv-btn')?.addEventListener('click', () => {
       let csv = '\uFEFF"Uraian","Kategori","Volume","Satuan","Harga Satuan","Total"\n';
-      state.boq.forEach(b => { csv += `"${b.name}","${b.category}",${b.quantity},"${b.unit}",${b.unitCost},${b.quantity * b.unitCost}\n`; });
+      state.boq.forEach(b => { csv += `${csvCell(b.name)},${csvCell(b.category)},${b.quantity},${csvCell(b.unit)},${b.unitCost},${b.quantity * b.unitCost}\n`; });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
       a.download = `RAB_ConstructionHub_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click(); toast('CSV berhasil diunduh', 'success');
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      toast('CSV berhasil diunduh', 'success');
     });
 
     // Print
@@ -1128,12 +1432,36 @@
     // Switch user (PAM)
     document.querySelectorAll('.switch-user-btn').forEach(b => b.addEventListener('click', () => {
       const u = USERS.find(x => x.id === b.dataset.uid);
-      if (u) { state.user = u; save('user', u); state.editingBoqId = null; toast(`Masuk sebagai: ${u.name} (${u.role})`, 'success'); render(); }
+      if (u) {
+        if (state.newBoqId) state.boq = state.boq.filter(item => item.id !== state.newBoqId);
+        state.user = u;
+        save('user', u);
+        state.editingBoqId = null;
+        state.newBoqId = null;
+        toast(`Masuk sebagai: ${u.name} (${u.role})`, 'success');
+        render();
+      }
     }));
 
     // FAB
-    document.getElementById('fab-btn')?.addEventListener('click', openAddProjectModal);
-    document.getElementById('add-project-btn')?.addEventListener('click', openAddProjectModal);
+    document.getElementById('fab-btn')?.addEventListener('click', () => openAddProjectModal());
+    document.getElementById('add-project-btn')?.addEventListener('click', () => openAddProjectModal());
+
+    document.getElementById('edit-project-btn')?.addEventListener('click', () => {
+      const project = state.projects.find(item => item.id === state.detailId);
+      if (project) openAddProjectModal(project);
+    });
+    document.getElementById('delete-project-btn')?.addEventListener('click', () => {
+      if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
+      const project = state.projects.find(item => item.id === state.detailId);
+      if (!project || !window.confirm(`Hapus proyek "${project.name}" beserta jadwalnya?`)) return;
+      state.projects = state.projects.filter(item => item.id !== project.id);
+      save('projects', state.projects);
+      state.detailId = null;
+      state.tab = 'projects';
+      toast('Proyek berhasil dihapus', 'success');
+      render();
+    });
 
     // Add site log
     document.getElementById('add-log-btn')?.addEventListener('click', openAddLogModal);
@@ -1160,7 +1488,7 @@
 
           <div>
             <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">URL Google Apps Script Web App</label>
-            <input type="url" id="gscript-url" value="${state.googleSheetUrl}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl font-mono text-[11px] focus:ring-2 focus:ring-emerald-500/30 outline-none"/>
+            <input type="url" id="gscript-url" value="${escapeHTML(state.googleSheetUrl)}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl font-mono text-[11px] focus:ring-2 focus:ring-emerald-500/30 outline-none"/>
           </div>
 
           <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2 text-[11px]">
@@ -1189,11 +1517,14 @@
 
     document.getElementById('save-gdrive-btn').onclick = () => {
       const url = document.getElementById('gscript-url').value.trim();
+      if (url && !isValidGoogleScriptUrl(url)) {
+        return toast('Gunakan URL Web App Google Apps Script yang berakhiran /exec', 'warning');
+      }
       state.googleSheetUrl = url;
       save('googleSheetUrl', url);
       close();
       if (url) {
-        toast('Google Drive berhasil terhubung!', 'success');
+        toast('Google Drive terhubung. Menarik data terbaru...', 'success');
         pullFromGoogleSheets();
       } else {
         toast('Koneksi Google Drive dilepas', 'info');
@@ -1210,29 +1541,35 @@
   // ==============================
   // MODALS OTHER
   // ==============================
-  function openAddProjectModal() {
+  function openAddProjectModal(existingProject = null) {
     if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
+    const editing = Boolean(existingProject);
+    const formProject = existingProject || {
+      name: '', location: '', manager: state.user.name, budget: '', spent: 0,
+      dueDate: addDaysISO(todayISO(), 365)
+    };
     const root = document.getElementById('modal-root');
     root.innerHTML = `
     <div class="modal-overlay" id="modal-bg">
       <div class="modal-content p-6 space-y-5">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="building-2" class="w-5 h-5 text-indigo-500"></i>Tambah Proyek Baru</h3>
-          <button id="close-modal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="building-2" class="w-5 h-5 text-indigo-500"></i>${editing ? 'Edit Proyek' : 'Tambah Proyek Baru'}</h3>
+          <button id="close-modal" aria-label="Tutup" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
         </div>
         <form id="project-form" class="space-y-4 text-xs">
-          <div><label class="block font-bold text-slate-500 mb-1.5">Nama Proyek *</label><input type="text" id="pf-name" required placeholder="Contoh: Gedung Kantor Tower C" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none"/></div>
-          <div class="grid grid-cols-2 gap-3">
-            <div><label class="block font-bold text-slate-500 mb-1.5">Lokasi *</label><input type="text" id="pf-loc" required placeholder="Jakarta Selatan" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
-            <div><label class="block font-bold text-slate-500 mb-1.5">Project Manager</label><input type="text" id="pf-pm" value="${state.user.name}" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="pf-name">Nama Proyek *</label><input type="text" id="pf-name" required maxlength="120" value="${escapeHTML(formProject.name)}" placeholder="Contoh: Gedung Kantor Tower C" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none"/></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="pf-loc">Lokasi *</label><input type="text" id="pf-loc" required maxlength="120" value="${escapeHTML(formProject.location)}" placeholder="Jakarta Selatan" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="pf-pm">Project Manager *</label><input type="text" id="pf-pm" required maxlength="100" value="${escapeHTML(formProject.manager)}" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div><label class="block font-bold text-slate-500 mb-1.5">Anggaran (IDR) *</label><input type="number" id="pf-budget" required placeholder="15000000000" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
-            <div><label class="block font-bold text-slate-500 mb-1.5">Target Selesai</label><input type="date" id="pf-date" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="pf-budget">Anggaran (IDR) *</label><input type="number" min="1" step="1" id="pf-budget" required value="${formProject.budget}" placeholder="15000000000" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="pf-date">Target Selesai *</label><input type="date" id="pf-date" required value="${formProject.dueDate}" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>
           </div>
+          ${editing ? `<div><label class="block font-bold text-slate-500 mb-1.5" for="pf-spent">Realisasi Biaya (IDR)</label><input type="number" min="0" step="1" id="pf-spent" value="${formProject.spent}" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl focus:ring-2 focus:ring-indigo-500/30 outline-none"/></div>` : ''}
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Batal</button>
-            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">Simpan Proyek</button>
+            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">${editing ? 'Simpan Perubahan' : 'Simpan Proyek'}</button>
           </div>
         </form>
       </div>
@@ -1244,52 +1581,75 @@
     document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
     document.getElementById('project-form').onsubmit = e => {
       e.preventDefault();
-      state.projects.push({
-        id: Date.now(), name: document.getElementById('pf-name').value,
-        location: document.getElementById('pf-loc').value,
-        manager: document.getElementById('pf-pm').value || state.user.name,
-        budget: parseFloat(document.getElementById('pf-budget').value) || 0,
-        dueDate: document.getElementById('pf-date').value || '2027-06-01',
-        spent: 0, completion: 0, status: 'Planning',
-        weather: { condition: 'Cerah', temp: 30, rainRisk: 'Rendah', icon: 'sun', alert: null },
-        cashflow: [],
-        phases: [
-          { id: Date.now() + 1, name: 'Perencanaan & Perizinan', status: 'In Progress', progress: 20, start: new Date().toISOString().slice(0, 10), end: '2027-01-01' },
-          { id: Date.now() + 2, name: 'Pekerjaan Substructure', status: 'Pending', progress: 0, start: '2027-01-02', end: '2027-03-01' }
-        ]
-      });
+      const name = document.getElementById('pf-name').value.trim();
+      const location = document.getElementById('pf-loc').value.trim();
+      const manager = document.getElementById('pf-pm').value.trim();
+      const budget = numberValue(document.getElementById('pf-budget').value);
+      const dueDate = validDate(document.getElementById('pf-date').value, addDaysISO(todayISO(), 365));
+      const duplicate = state.projects.some(project => project !== existingProject && project.name.toLowerCase() === name.toLowerCase());
+      if (duplicate) return toast('Nama proyek sudah digunakan', 'warning');
+      if (!name || !location || !manager || budget <= 0) return toast('Lengkapi data proyek dengan nilai yang valid', 'warning');
+
+      if (editing) {
+        const oldName = existingProject.name;
+        Object.assign(existingProject, { name, location, manager, budget, dueDate, spent: Math.max(0, numberValue(document.getElementById('pf-spent').value)) });
+        Object.assign(existingProject, normalizeProject(existingProject));
+        if (oldName !== name) {
+          state.logs.forEach(log => { if (log.project === oldName) log.project = name; });
+          save('logs', state.logs, { sync: false });
+        }
+        state.detailId = existingProject.id;
+        state.tab = 'detail';
+      } else {
+        if (daysUntil(dueDate) < 1) return toast('Target proyek baru minimal satu hari dari hari ini', 'warning');
+        const firstPhaseEnd = addDaysISO(todayISO(), Math.max(0, Math.floor(daysUntil(dueDate) * 0.2)));
+        state.projects.push(normalizeProject({
+          id: Date.now(), name, location, manager, budget, dueDate,
+          spent: 0, completion: 0, status: 'Planning', cashflow: [],
+          phases: [
+            { id: Date.now() + 1, name: 'Perencanaan & Perizinan', status: 'Pending', progress: 0, start: todayISO(), end: firstPhaseEnd },
+            { id: Date.now() + 2, name: 'Pelaksanaan Konstruksi', status: 'Pending', progress: 0, start: addDaysISO(firstPhaseEnd, 1), end: dueDate }
+          ]
+        }, state.projects.length));
+        state.tab = 'projects';
+      }
       save('projects', state.projects);
-      close(); toast('Proyek baru berhasil ditambahkan!', 'success');
-      state.tab = 'projects'; render();
+      close();
+      toast(editing ? 'Perubahan proyek berhasil disimpan' : 'Proyek baru berhasil ditambahkan', 'success');
+      render();
     };
   }
 
   function openAddLogModal() {
     if (!hasPerm('add_sitelog')) return toast('Akses ditolak', 'error');
+    const activeProjects = state.projects.filter(p => p.status !== 'Completed');
+    if (!activeProjects.length) return toast('Tidak ada proyek aktif untuk dilaporkan', 'warning');
     const root = document.getElementById('modal-root');
     root.innerHTML = `
     <div class="modal-overlay" id="modal-bg">
       <div class="modal-content p-6 space-y-5">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-500"></i>Buat Laporan Harian</h3>
-          <button id="close-modal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+          <button id="close-modal" aria-label="Tutup" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
         </div>
         <form id="log-form" class="space-y-4 text-xs">
           <div><label class="block font-bold text-slate-500 mb-1.5">Proyek *</label>
             <select id="lf-proj" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
-              ${state.projects.filter(p => p.status !== 'Completed').map(p => `<option value="${p.name}">${p.name}</option>`).join('')}
+              ${activeProjects.map(p => `<option value="${escapeHTML(p.name)}">${escapeHTML(p.name)}</option>`).join('')}
             </select>
           </div>
-          <div><label class="block font-bold text-slate-500 mb-1.5">Ringkasan Laporan *</label><textarea id="lf-sum" required rows="3" placeholder="Deskripsi pekerjaan hari ini..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
-          <div class="grid grid-cols-3 gap-3">
-            <div><label class="block font-bold text-slate-500 mb-1.5">Cuaca</label><input type="text" id="lf-weather" value="Cerah (30°C)" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
-            <div><label class="block font-bold text-slate-500 mb-1.5">Jumlah Pekerja</label><input type="number" id="lf-workers" value="30" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-sum">Ringkasan Laporan *</label><textarea id="lf-sum" required maxlength="1000" rows="3" placeholder="Deskripsi pekerjaan hari ini..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-date">Tanggal Laporan</label><input type="date" id="lf-date" value="${todayISO()}" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-workers">Jumlah Pekerja</label><input type="number" min="0" step="1" id="lf-workers" value="30" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
             <div><label class="block font-bold text-slate-500 mb-1.5">Status K3</label>
               <select id="lf-safety" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
                 <option value="PASS">PASS</option><option value="WARNING">WARNING</option>
               </select>
             </div>
           </div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-safety-note">Catatan / Tindak Lanjut K3</label><textarea id="lf-safety-note" maxlength="500" rows="2" placeholder="Contoh: Toolbox meeting selesai atau detail temuan K3..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-photo">URL Foto (opsional)</label><input type="url" id="lf-photo" placeholder="https://..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Batal</button>
             <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">Simpan Laporan</button>
@@ -1304,16 +1664,19 @@
     document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
     document.getElementById('log-form').onsubmit = e => {
       e.preventDefault();
-      state.logs.unshift({
-        id: Date.now(), date: new Date().toISOString().slice(0, 10),
+      const safety = document.getElementById('lf-safety').value;
+      const safetyNote = document.getElementById('lf-safety-note').value.trim();
+      if (safety === 'WARNING' && !safetyNote) return toast('Status WARNING memerlukan catatan tindak lanjut K3', 'warning');
+      state.logs.unshift(normalizeLog({
+        id: Date.now(), date: document.getElementById('lf-date').value,
         project: document.getElementById('lf-proj').value,
         author: state.user.name,
-        summary: document.getElementById('lf-sum').value,
-        weather: document.getElementById('lf-weather').value,
+        summary: document.getElementById('lf-sum').value.trim(),
         workers: parseInt(document.getElementById('lf-workers').value) || 0,
-        safety: document.getElementById('lf-safety').value,
-        photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80'
-      });
+        safety,
+        safetyNote,
+        photo: document.getElementById('lf-photo').value.trim() || DEFAULT_LOG_PHOTO
+      }, state.logs.length));
       save('logs', state.logs);
       close(); toast('Laporan harian berhasil disimpan!', 'success');
       render();
@@ -1323,7 +1686,27 @@
   // ==============================
   // BOOT
   // ==============================
+  function bindGlobalEvents() {
+    document.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (state.showNotifs && target && !target.closest('#notif-btn') && !target.closest('#notif-dropdown')) {
+        state.showNotifs = false;
+        render();
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      const modalRoot = document.getElementById('modal-root');
+      if (modalRoot?.innerHTML) modalRoot.innerHTML = '';
+      if (state.showNotifs) {
+        state.showNotifs = false;
+        render();
+      }
+    });
+  }
+
   function boot() {
+    bindGlobalEvents();
     render();
     if (state.googleSheetUrl) {
       pullFromGoogleSheets();

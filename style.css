@@ -1,4 +1,4 @@
-/* Construction Hub v3.0 - Premium Design System */
+/* Construction Hub v3.3 - Premium Design System */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap');
 
 /* ===== CSS VARIABLES & DESIGN TOKENS ===== */
@@ -346,7 +346,7 @@ body {
 .fab-btn:active { transform: scale(0.95); }
 
 @media (min-width: 1024px) {
-  .fab-btn { bottom: 28px; right: 28px; }
+  .fab-btn { display: none; }
 }
 
 /* ===== NOTIFICATION BADGE ===== */

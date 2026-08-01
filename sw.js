@@ -1,20 +1,24 @@
-const CACHE_NAME = 'construction-hub-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'construction-hub-v3.3.2';
+const APP_SHELL = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
-  './manifest.json',
+  './style.css?v=3.3.2',
+  './app.js?v=3.3.2',
+  './manifest.json'
+];
+const OPTIONAL_ASSETS = [
   'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap',
-  'https://unpkg.com/lucide@latest'
+  'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap',
+  'https://unpkg.com/lucide@latest',
+  'https://cdn-icons-png.flaticon.com/512/3063/3063823.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching app shell');
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => console.log('[SW] Optional cache fail:', err));
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(APP_SHELL);
+      await Promise.allSettled(OPTIONAL_ASSETS.map(asset => cache.add(asset)));
+      console.log('[SW] App shell cached');
     })
   );
   self.skipWaiting();
@@ -38,21 +42,41 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+
+  // Navigations use network-first so new deployments appear immediately.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Return cached and fetch update in background
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {/* offline fallback */});
+        // Same-origin assets refresh safely in the background.
+        if (requestUrl.origin === self.location.origin) {
+          event.waitUntil(
+            fetch(event.request).then(networkResponse => {
+              if (networkResponse.ok) return caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResponse.clone()));
+            }).catch(() => undefined)
+          );
+        }
         return cachedResponse;
       }
-      return fetch(event.request).catch(() => {
-        if (event.request.headers.get('accept').includes('text/html')) {
-          return caches.match('./index.html');
+      return fetch(event.request).then(networkResponse => {
+        if (requestUrl.origin === self.location.origin && networkResponse.ok) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
         }
+        return networkResponse;
       });
     })
   );
