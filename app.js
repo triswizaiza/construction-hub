@@ -1,5 +1,5 @@
 /**
- * Construction Hub v3.3 - Enterprise Site & Financial Management
+ * Construction Hub v3.4 - Enterprise Site & Financial Management
  * Premium PWA with Google Drive / Google Sheets Cloud Sync Integration
  */
 (function () {
@@ -8,7 +8,7 @@
   // ==============================
   // DATA LAYER & DEFAULTS (CLEAN INITIAL DATA)
   // ==============================
-  const DATA_VERSION = 'v3.3.2_operational_pulse';
+  const DATA_VERSION = 'v3.4_project_boq';
   const CLOUD_SYNC_DELAY = 800;
   const DEFAULT_LOG_PHOTO = 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80';
 
@@ -50,9 +50,9 @@
   ];
 
   const DEFAULT_BOQ = [
-    { id: 1, name: 'Beton ReadyMix K-350 Slump 12±2', category: 'Material', quantity: 650, unit: 'm³', unitCost: 1350000 },
-    { id: 2, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
-    { id: 3, name: 'Sewa Excavator Komatsu PC200-8MO', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 380000 }
+    { id: 1, projectId: 1, name: 'Beton ReadyMix K-350 Slump 12±2', category: 'Material', quantity: 650, unit: 'm³', unitCost: 1350000 },
+    { id: 2, projectId: 1, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
+    { id: 3, projectId: 1, name: 'Sewa Excavator Komatsu PC200-8MO', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 380000 }
   ];
 
   const DEFAULT_LOGS = [
@@ -135,10 +135,12 @@
     };
   }
 
-  function normalizeBoqItem(item = {}, index = 0) {
+  function normalizeBoqItem(item = {}, index = 0, fallbackProjectId = null) {
     const categories = ['Material', 'Labor', 'Equipment', 'Subcontractor'];
+    const linkedProjectId = numberValue(item.projectId, fallbackProjectId);
     return {
       id: numberValue(item.id, Date.now() + index),
+      projectId: linkedProjectId > 0 ? linkedProjectId : fallbackProjectId,
       name: textValue(item.name, `Item ${index + 1}`),
       category: categories.includes(item.category) ? item.category : 'Material',
       quantity: Math.max(0, numberValue(item.quantity)),
@@ -195,10 +197,18 @@
   const loadedNotifs = load('notifs', NOTIFICATIONS);
   const loadedUser = load('user', USERS[0]);
   const loadedGoogleSheetUrl = load('googleSheetUrl', '');
+  const normalizedProjects = (Array.isArray(loadedProjects) ? loadedProjects : DEFAULT_PROJECTS).map(normalizeProject);
+  const defaultBoqProjectId = normalizedProjects[0]?.id || null;
+  const validProjectIds = new Set(normalizedProjects.map(project => project.id));
+  const normalizedBoq = (Array.isArray(loadedBoq) ? loadedBoq : DEFAULT_BOQ).map((item, index) => {
+    const normalized = normalizeBoqItem(item, index, defaultBoqProjectId);
+    if (!validProjectIds.has(normalized.projectId)) normalized.projectId = defaultBoqProjectId;
+    return normalized;
+  });
 
   let state = {
-    projects: (Array.isArray(loadedProjects) ? loadedProjects : DEFAULT_PROJECTS).map(normalizeProject),
-    boq: (Array.isArray(loadedBoq) ? loadedBoq : DEFAULT_BOQ).map(normalizeBoqItem),
+    projects: normalizedProjects,
+    boq: normalizedBoq,
     logs: (Array.isArray(loadedLogs) ? loadedLogs : DEFAULT_LOGS).map(normalizeLog),
     notifs: (Array.isArray(loadedNotifs) ? loadedNotifs : clone(NOTIFICATIONS)).filter(item => item && typeof item === 'object').map(normalizeNotification),
     user: USERS.find(user => user.id === loadedUser?.id) || USERS[0],
@@ -212,6 +222,7 @@
     search: '',
     boqFilter: 'All',
     boqSort: 'name',
+    boqProjectId: defaultBoqProjectId,
     showNotifs: false,
     showUserMenu: false,
     editingBoqId: null,
@@ -240,7 +251,8 @@
     localStorage.removeItem('chub_logs');
     localStorage.removeItem('chub_notifs');
     state.projects = clone(DEFAULT_PROJECTS).map(normalizeProject);
-    state.boq = clone(DEFAULT_BOQ).map(normalizeBoqItem);
+    state.boq = clone(DEFAULT_BOQ).map((item, index) => normalizeBoqItem(item, index, state.projects[0]?.id || null));
+    state.boqProjectId = state.projects[0]?.id || null;
     state.logs = clone(DEFAULT_LOGS).map(normalizeLog);
     state.notifs = clone(NOTIFICATIONS);
     save('projects', state.projects, { sync: false });
@@ -314,10 +326,19 @@
         state.syncing = false;
         if (res && Array.isArray(res.projects) && res.projects.length) {
           state.projects = res.projects.map(normalizeProject);
+          if (!state.projects.some(project => project.id === state.boqProjectId)) {
+            state.boqProjectId = state.projects[0]?.id || null;
+          }
           save('projects', state.projects, { sync: false });
         }
         if (res && Array.isArray(res.boq) && res.boq.length) {
-          state.boq = res.boq.map(normalizeBoqItem);
+          const fallbackProjectId = state.boqProjectId || state.projects[0]?.id || null;
+          const projectIds = new Set(state.projects.map(project => project.id));
+          state.boq = res.boq.map((item, index) => {
+            const normalized = normalizeBoqItem(item, index, fallbackProjectId);
+            if (!projectIds.has(normalized.projectId)) normalized.projectId = fallbackProjectId;
+            return normalized;
+          });
           save('boq', state.boq, { sync: false });
         }
         if (res && Array.isArray(res.siteLogs) && res.siteLogs.length) {
@@ -388,6 +409,7 @@
     if (/^[=+\-@]/.test(text)) text = `'${text}`;
     return `"${text.replace(/"/g, '""')}"`;
   };
+  const safeFilename = value => textValue(value, 'Proyek').replace(/[^a-z0-9-_]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'Proyek';
   const isValidGoogleScriptUrl = value => {
     try {
       const url = new URL(value);
@@ -410,9 +432,9 @@
     setTimeout(() => el.remove(), 3000);
   }
 
-  function calc() {
+  function calculateBoqMetrics(items, revenue) {
     let mat = 0, lab = 0, eqp = 0, sub = 0, total = 0;
-    state.boq.forEach(i => {
+    items.forEach(i => {
       const c = (i.quantity || 0) * (i.unitCost || 0);
       total += c;
       if (i.category === 'Material') mat += c;
@@ -420,12 +442,17 @@
       else if (i.category === 'Equipment') eqp += c;
       else if (i.category === 'Subcontractor') sub += c;
     });
-    const profit = state.revenue - total;
-    const margin = state.revenue > 0 ? ((profit / state.revenue) * 100).toFixed(1) : 0;
+    const profit = revenue - total;
+    const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
+    return { mat, lab, eqp, sub, total, profit, margin };
+  }
+
+  function calc() {
+    const boqMetrics = calculateBoqMetrics(state.boq, state.revenue);
     const allocated = state.projects.reduce((a, p) => a + p.budget, 0);
     const spent = state.projects.reduce((a, p) => a + p.spent, 0);
     const active = state.projects.filter(p => p.status === 'In Progress').length;
-    return { mat, lab, eqp, sub, total, profit, margin, allocated, spent, active };
+    return { ...boqMetrics, allocated, spent, active };
   }
 
   function health(p) {
@@ -489,7 +516,7 @@
           <div class="hidden sm:block">
             <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
               CONSTRUCTION HUB
-              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.3</span>
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.4</span>
             </h1>
             <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
@@ -802,6 +829,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         ${state.projects.map((p, i) => {
           const h = health(p);
+          const rabTotal = state.boq.filter(item => item.projectId === p.id).reduce((total, item) => total + item.quantity * item.unitCost, 0);
           return `
           <div class="project-card card p-0 animate-slide-up" data-search="${encodeURIComponent(`${p.name} ${p.location} ${p.manager}`.toLowerCase())}" style="animation-delay: ${i * 80}ms; animation-fill-mode: both">
             <!-- Card Top Gradient -->
@@ -818,6 +846,7 @@
               <div class="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl space-y-2.5 border border-slate-100 dark:border-slate-700/30">
                 <div class="flex justify-between text-xs"><span class="text-slate-400">Budget</span><span class="font-bold">${fmtShort(p.budget)}</span></div>
                 <div class="flex justify-between text-xs"><span class="text-slate-400">Terpakai</span><span class="font-bold">${fmtShort(p.spent)}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-400">RAB</span><span class="font-bold text-indigo-600 dark:text-indigo-400">${fmtShort(rabTotal)}</span></div>
                 <div>
                   <div class="flex justify-between text-xs mb-1"><span class="text-slate-500 font-medium">Progres</span><span class="font-black text-indigo-600 dark:text-indigo-400">${p.completion}%</span></div>
                   <div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
@@ -867,6 +896,7 @@
     const deadline = deadlineMeta(p);
     const projectLogs = state.logs.filter(log => log.project === p.name).sort((a, b) => b.date.localeCompare(a.date));
     const latestLog = projectLogs[0];
+    const projectBoq = calculateBoqMetrics(state.boq.filter(item => item.projectId === p.id), p.budget);
     const maxCF = Math.max(...(p.cashflow || []).map(cf => Math.max(cf.budgeted, cf.actual)), 1);
     return `
     <div class="space-y-6 animate-fade-in">
@@ -889,6 +919,7 @@
               </p>
             </div>
             <div class="flex items-center gap-3">
+              <button id="project-boq-btn" class="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 no-print"><i data-lucide="calculator" class="w-3.5 h-3.5"></i>RAB</button>
               ${hasPerm('edit_projects') ? `
                 <div class="flex flex-col gap-2 no-print">
                   <button id="edit-project-btn" class="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold hover:bg-indigo-500/20 transition-all flex items-center gap-1.5"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i>Edit</button>
@@ -907,7 +938,7 @@
           </div>
 
           <!-- Stats -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5">
             <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
               <span class="text-[10px] text-slate-400 font-bold uppercase">Budget</span>
               <p class="text-sm font-black mt-0.5">${fmtShort(p.budget)}</p>
@@ -919,6 +950,10 @@
             <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
               <span class="text-[10px] text-slate-400 font-bold uppercase">Sisa Budget</span>
               <p class="text-sm font-black ${p.budget - p.spent < 0 ? 'text-rose-500' : ''} mt-0.5">${fmtShort(p.budget - p.spent)}</p>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+              <span class="text-[10px] text-slate-400 font-bold uppercase">Total RAB</span>
+              <p class="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-0.5">${fmtShort(projectBoq.total)}</p>
             </div>
             <div class="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
               <span class="text-[10px] text-slate-400 font-bold uppercase">Jumlah Fase</span>
@@ -1011,8 +1046,16 @@
   // ==============================
   // 4. BOQ / RAB
   // ==============================
-  function boqHTML(c) {
-    let items = state.boqFilter === 'All' ? [...state.boq] : state.boq.filter(b => b.category === state.boqFilter);
+  function boqHTML() {
+    if (!state.projects.length) {
+      return `<div class="card p-10 text-center animate-fade-in"><i data-lucide="folder-plus" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i><h2 class="text-xl font-black">Tambahkan proyek terlebih dahulu</h2><p class="text-sm text-slate-500 mt-2">Setiap item BOQ/RAB harus terhubung ke sebuah proyek.</p><button class="tab-btn mt-5 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold" data-tab="projects">Buka Halaman Proyek</button></div>`;
+    }
+    const selectedProject = state.projects.find(project => project.id === state.boqProjectId) || state.projects[0];
+    state.boqProjectId = selectedProject.id;
+    const projectItems = state.boq.filter(item => item.projectId === selectedProject.id);
+    const exportableItems = state.newBoqId ? projectItems.filter(item => item.id !== state.newBoqId) : projectItems;
+    const c = calculateBoqMetrics(projectItems, selectedProject.budget);
+    let items = state.boqFilter === 'All' ? [...projectItems] : projectItems.filter(b => b.category === state.boqFilter);
     if (state.boqSort === 'cost-desc') items.sort((a, b) => (b.quantity * b.unitCost) - (a.quantity * a.unitCost));
     else if (state.boqSort === 'cost-asc') items.sort((a, b) => (a.quantity * a.unitCost) - (b.quantity * b.unitCost));
     else items.sort((a, b) => a.name.localeCompare(b.name));
@@ -1023,10 +1066,29 @@
         <div>
           <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Cost Estimation</p>
           <h2 class="text-2xl font-black tracking-tight">Bill of Quantities (RAB)</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">RAB khusus proyek: <span class="font-bold text-slate-700 dark:text-slate-200">${escapeHTML(selectedProject.name)}</span></p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           ${hasPerm('edit_boq') ? `<button id="add-boq-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25"><i data-lucide="plus" class="w-4 h-4"></i>Tambah Item</button>` : ''}
-          <button id="csv-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md"><i data-lucide="download" class="w-4 h-4"></i>Ekspor CSV</button>
+          <button id="csv-btn" ${exportableItems.length ? '' : 'disabled'} class="${exportableItems.length ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md' : 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed'} text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i>Ekspor CSV</button>
+        </div>
+      </div>
+
+      <!-- Project scope -->
+      <div class="card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><i data-lucide="folder-kanban" class="w-5 h-5"></i></div>
+          <div class="min-w-0">
+            <p class="text-[10px] font-bold uppercase text-slate-400">Scope RAB Aktif</p>
+            <p class="text-sm font-black truncate">${escapeHTML(selectedProject.name)}</p>
+            <p class="text-[11px] text-slate-400">${projectItems.length} item • ${escapeHTML(selectedProject.location)}</p>
+          </div>
+        </div>
+        <div class="sm:w-80">
+          <label for="boq-project-select" class="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">Pilih Proyek</label>
+          <select id="boq-project-select" class="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-xs font-bold px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/30">
+            ${state.projects.map(project => `<option value="${project.id}" ${project.id === selectedProject.id ? 'selected' : ''}>${escapeHTML(project.name)}</option>`).join('')}
+          </select>
         </div>
       </div>
 
@@ -1036,8 +1098,8 @@
           <div class="flex items-center gap-3">
             <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"><i data-lucide="receipt" class="w-5 h-5"></i></div>
             <div>
-              <span class="text-[10px] font-bold uppercase text-slate-400">Estimasi Nilai Kontrak</span>
-              <p class="text-lg font-black">${fmtIDR(state.revenue)}</p>
+              <span class="text-[10px] font-bold uppercase text-slate-400">Budget Proyek</span>
+              <p class="text-lg font-black">${fmtIDR(selectedProject.budget)}</p>
             </div>
           </div>
           <div class="text-right">
@@ -1047,7 +1109,7 @@
           </div>
         </div>
         <div class="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-          <div class="bg-gradient-to-r from-indigo-500 to-violet-500 h-full transition-all duration-500" style="width:${Math.min(100, (c.total / (state.revenue || 1)) * 100)}%"></div>
+          <div class="bg-gradient-to-r from-indigo-500 to-violet-500 h-full transition-all duration-500" style="width:${Math.min(100, (c.total / (selectedProject.budget || 1)) * 100)}%"></div>
           <div class="bg-emerald-500 h-full transition-all duration-500" style="width:${Math.max(0, Number(c.margin))}%"></div>
         </div>
         <div class="flex items-center justify-between text-[10px] text-slate-400 font-medium">
@@ -1118,7 +1180,7 @@
                     </td>
                   ` : ''}
                 </tr>`;
-              }).join('') || `<tr><td colspan="7" class="p-10 text-center text-slate-400">${state.boq.length ? 'Tidak ada item pada kategori ini.' : 'Belum ada item RAB.'}</td></tr>`}
+              }).join('') || `<tr><td colspan="7" class="p-10 text-center text-slate-400">${projectItems.length ? 'Tidak ada item pada kategori ini.' : 'Belum ada item RAB untuk proyek ini.'}</td></tr>`}
             </tbody>
             <tfoot class="bg-slate-50 dark:bg-slate-800/30 border-t-2 border-indigo-500/30">
               <tr>
@@ -1342,6 +1404,18 @@
     });
 
     // BOQ category filter
+    document.getElementById('boq-project-select')?.addEventListener('change', e => {
+      if (state.editingBoqId) {
+        e.target.value = String(state.boqProjectId);
+        return toast('Simpan atau batalkan item yang sedang diedit', 'warning');
+      }
+      const projectId = parseInt(e.target.value);
+      if (!state.projects.some(project => project.id === projectId)) return;
+      state.boqProjectId = projectId;
+      state.boqFilter = 'All';
+      render();
+    });
+
     document.querySelectorAll('.boq-cat-btn').forEach(b => b.addEventListener('click', () => {
       if (state.editingBoqId) return toast('Simpan atau batalkan item yang sedang diedit', 'warning');
       state.boqFilter = b.dataset.cat;
@@ -1404,7 +1478,8 @@
 
     // Add BOQ item
     document.getElementById('add-boq-btn')?.addEventListener('click', () => {
-      const item = { id: Date.now(), name: 'Item Baru', category: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 };
+      if (!state.boqProjectId) return toast('Pilih proyek terlebih dahulu', 'warning');
+      const item = { id: Date.now(), projectId: state.boqProjectId, name: 'Item Baru', category: 'Material', quantity: 1, unit: 'pcs', unitCost: 0 };
       state.boq.push(item);
       state.editingBoqId = item.id;
       state.newBoqId = item.id;
@@ -1414,13 +1489,17 @@
 
     // Export CSV
     document.getElementById('csv-btn')?.addEventListener('click', () => {
+      const selectedProject = state.projects.find(project => project.id === state.boqProjectId);
+      if (!selectedProject) return toast('Pilih proyek terlebih dahulu', 'warning');
+      const projectItems = state.boq.filter(item => item.projectId === selectedProject.id && item.id !== state.newBoqId);
+      if (!projectItems.length) return toast('Belum ada item RAB untuk diekspor', 'warning');
       let csv = '\uFEFF"Uraian","Kategori","Volume","Satuan","Harga Satuan","Total"\n';
-      state.boq.forEach(b => { csv += `${csvCell(b.name)},${csvCell(b.category)},${b.quantity},${csvCell(b.unit)},${b.unitCost},${b.quantity * b.unitCost}\n`; });
+      projectItems.forEach(b => { csv += `${csvCell(b.name)},${csvCell(b.category)},${b.quantity},${csvCell(b.unit)},${b.unitCost},${b.quantity * b.unitCost}\n`; });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       const objectUrl = URL.createObjectURL(blob);
       a.href = objectUrl;
-      a.download = `RAB_ConstructionHub_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `RAB_${safeFilename(selectedProject.name)}_${todayISO()}.csv`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       toast('CSV berhasil diunduh', 'success');
@@ -1451,15 +1530,27 @@
       const project = state.projects.find(item => item.id === state.detailId);
       if (project) openAddProjectModal(project);
     });
+    document.getElementById('project-boq-btn')?.addEventListener('click', () => {
+      const project = state.projects.find(item => item.id === state.detailId);
+      if (!project) return;
+      state.boqProjectId = project.id;
+      state.boqFilter = 'All';
+      state.tab = 'boq';
+      render();
+    });
     document.getElementById('delete-project-btn')?.addEventListener('click', () => {
       if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
       const project = state.projects.find(item => item.id === state.detailId);
-      if (!project || !window.confirm(`Hapus proyek "${project.name}" beserta jadwalnya?`)) return;
+      if (!project || !window.confirm(`Hapus proyek "${project.name}" beserta jadwal dan RAB-nya?`)) return;
+      const removedBoqCount = state.boq.filter(item => item.projectId === project.id).length;
       state.projects = state.projects.filter(item => item.id !== project.id);
+      state.boq = state.boq.filter(item => item.projectId !== project.id);
+      if (state.boqProjectId === project.id) state.boqProjectId = state.projects[0]?.id || null;
+      save('boq', state.boq, { sync: false });
       save('projects', state.projects);
       state.detailId = null;
       state.tab = 'projects';
-      toast('Proyek berhasil dihapus', 'success');
+      toast(`Proyek dan ${removedBoqCount} item RAB berhasil dihapus`, 'success');
       render();
     });
 
@@ -1611,6 +1702,7 @@
             { id: Date.now() + 2, name: 'Pelaksanaan Konstruksi', status: 'Pending', progress: 0, start: addDaysISO(firstPhaseEnd, 1), end: dueDate }
           ]
         }, state.projects.length));
+        if (!state.boqProjectId) state.boqProjectId = state.projects[state.projects.length - 1].id;
         state.tab = 'projects';
       }
       save('projects', state.projects);
