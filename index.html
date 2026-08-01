@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Construction Hub - Enterprise Site & Financial Platform</title>
+
+  <!-- PWA & SEO Meta Tags -->
+  <meta name="description" content="Platform Manajemen Proyek & Keuangan Konstruksi Real-time untuk Mobile dan Desktop." />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ConstructionHub" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3063/3063823.png" />
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3063/3063823.png" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300">
+
+  <!-- Root App Container -->
+  <div id="app-root" class="min-h-screen flex flex-col">
+    <!-- Fallback / Loading Shell -->
+    <div id="loading-spinner" class="fixed inset-0 bg-slate-900 text-white flex flex-col items-center justify-center z-50 transition-opacity duration-300">
+      <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <h1 class="text-xl font-bold tracking-wider">CONSTRUCTION HUB</h1>
+      <p class="text-xs text-slate-400 mt-1">Memuat Platform Management & PWA Engine...</p>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="./app.js"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('PWA ServiceWorker registered with scope:', reg.scope))
+          .catch(err => console.log('ServiceWorker registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+/* Construction Hub - Modern Responsive & PWA Design System */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-subtle: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #eff6ff;
+  --accent: #06b6d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(226, 232, 240, 0.8);
+  --glass-blur: blur(12px);
+}
+
+.dark {
+  --bg-main: #0b0f19;
+  --bg-card: #111827;
+  --bg-card-subtle: #1f2937;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --border-color: #1f2937;
+  --primary-light: rgba(37, 99, 235, 0.15);
+  --glass-bg: rgba(17, 24, 39, 0.85);
+  --glass-border: rgba(31, 41, 55, 0.8);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+  padding-bottom: 72px; /* Space for mobile bottom bar */
+}
+
+@media (min-width: 1024px) {
+  body {
+    padding-bottom: 0;
+  }
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+/* Touch-friendly buttons for mobile */
+button, input, select {
+  touch-action: manipulation;
+}
+
+/* Gantt Chart Custom Timeline */
+.gantt-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-card-subtle);
+  transition: all 0.2s ease;
+}
+
+.gantt-track {
+  position: relative;
+  height: 28px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gantt-bar {
+  height: 100%;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+/* Weather & Risk Card Gradients */
+.weather-card-sunny {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: white;
+}
+
+.weather-card-rainy {
+  background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+  color: white;
+}
+
+.weather-card-warning {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: white;
+}
+
+/* Donut Chart Animation */
+svg path {
+  transition: all 0.3s ease;
+}
+svg path:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+  transform-origin: center;
+}
+
+/* Mobile Bottom Navigation */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  z-index: 50;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  gap: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-item.active {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* Hide mobile nav on laptop screens */
+@media (min-width: 1024px) {
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+}
+
+/* Floating Action Button (FAB) for Mobile Quick Add */
+.fab-btn {
+  position: fixed;
+  bottom: 78px;
+  right: 20px;
+  width: 54px;
+  height: 54px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.5);
+  border: none;
+  cursor: pointer;
+  z-index: 45;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.fab-btn:active {
+  transform: scale(0.92);
+}
+@media (min-width: 1024px) {
+  .fab-btn {
+    bottom: 24px;
+    right: 24px;
+  }
+}
+
+/* Print / Export helper */
+@media print {
+  body {
+    background: white;
+    color: black;
+    padding-bottom: 0;
+  }
+  .no-print, .mobile-bottom-nav, .fab-btn, header nav, .sidebar {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}
