@@ -1,6 +1,6 @@
 /**
- * Construction Hub v3.0 - Enterprise Site & Financial Management
- * Premium PWA with full-featured construction management
+ * Construction Hub v3.1 - Enterprise Site & Financial Management
+ * Premium PWA with Google Drive / Google Sheets Cloud Sync Integration
  */
 (function () {
   'use strict';
@@ -106,10 +106,18 @@
   ];
 
   // ==============================
-  // STATE ENGINE (localStorage)
+  // STATE ENGINE (localStorage & Cloud)
   // ==============================
   const load = (k, d) => { try { const v = localStorage.getItem('chub_' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
-  const save = (k, v) => { try { localStorage.setItem('chub_' + k, JSON.stringify(v)); } catch (e) {} };
+  const save = (k, v) => {
+    try {
+      localStorage.setItem('chub_' + k, JSON.stringify(v));
+      // Auto-sync with Google Drive if configured
+      if (state.googleSheetUrl && (k === 'projects' || k === 'boq' || k === 'logs')) {
+        pushToGoogleSheets();
+      }
+    } catch (e) {}
+  };
 
   let state = {
     projects: load('projects', DEFAULT_PROJECTS),
@@ -120,6 +128,8 @@
     revenue: load('revenue', 45000000000),
     budget: load('budget', 100000000000),
     dark: load('dark', true),
+    googleSheetUrl: load('googleSheetUrl', ''),
+    syncing: false,
     tab: 'dashboard',
     detailId: null,
     search: '',
@@ -131,6 +141,83 @@
   };
 
   let deferredPWA = null;
+
+  // ==============================
+  // GOOGLE SHEETS CLOUD SYNC ENGINE
+  // ==============================
+  function pushToGoogleSheets() {
+    if (!state.googleSheetUrl) return;
+    state.syncing = true;
+    renderHeaderSyncStatus();
+    
+    fetch(state.googleSheetUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projects: state.projects,
+        boq: state.boq,
+        siteLogs: state.logs,
+        user: state.user.name
+      })
+    }).then(() => {
+      state.syncing = false;
+      renderHeaderSyncStatus();
+      console.log('[GoogleSheets] Data pushed successfully');
+    }).catch(err => {
+      state.syncing = false;
+      renderHeaderSyncStatus();
+      console.warn('[GoogleSheets] Push error:', err);
+    });
+  }
+
+  function pullFromGoogleSheets() {
+    if (!state.googleSheetUrl) return;
+    state.syncing = true;
+    toast('Menghubungkan ke Google Drive...', 'info');
+    renderHeaderSyncStatus();
+
+    fetch(state.googleSheetUrl)
+      .then(res => res.json())
+      .then(res => {
+        state.syncing = false;
+        if (res && res.projects && res.projects.length) {
+          state.projects = res.projects;
+          save('projects', state.projects);
+        }
+        if (res && res.boq && res.boq.length) {
+          state.boq = res.boq;
+          save('boq', state.boq);
+        }
+        if (res && res.siteLogs && res.siteLogs.length) {
+          state.logs = res.siteLogs;
+          save('logs', state.logs);
+        }
+        toast('Selesai! Data terbaru ditarik dari Google Drive 📁', 'success');
+        render();
+      })
+      .catch(err => {
+        state.syncing = false;
+        renderHeaderSyncStatus();
+        toast('Gagal menarik dari Google Drive (Cek URL Script)', 'warning');
+      });
+  }
+
+  function renderHeaderSyncStatus() {
+    const el = document.getElementById('sync-status-badge');
+    if (!el) return;
+    if (state.syncing) {
+      el.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-bold animate-pulse cursor-pointer';
+      el.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i><span>Sinkronisasi...</span>`;
+    } else if (state.googleSheetUrl) {
+      el.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold cursor-pointer hover:bg-emerald-500/20 transition-all';
+      el.innerHTML = `<i data-lucide="cloud-check" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Google Drive Aktif</span>`;
+    } else {
+      el.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-bold cursor-pointer hover:bg-indigo-500/10 hover:text-indigo-600 transition-all';
+      el.innerHTML = `<i data-lucide="cloud-off" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Hubungkan GDrive</span>`;
+    }
+    if (window.lucide) lucide.createIcons({ nodes: [el] });
+  }
 
   // ==============================
   // UTILITIES
@@ -227,7 +314,7 @@
           <div class="hidden sm:block">
             <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
               CONSTRUCTION HUB
-              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3</span>
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.1</span>
             </h1>
             <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
@@ -244,6 +331,9 @@
 
         <!-- Actions -->
         <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          <!-- Google Drive Sync Status Badge -->
+          <div id="sync-status-badge"></div>
+
           ${deferredPWA ? `<button id="pwa-btn" class="hidden sm:flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-2 rounded-xl shadow-md shadow-emerald-600/20 transition-all"><i data-lucide="download" class="w-3.5 h-3.5"></i>Install</button>` : ''}
           
           <button id="dark-btn" class="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" title="Theme">
@@ -348,6 +438,9 @@
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Berikut ringkasan portofolio konstruksi Anda hari ini.</p>
         </div>
         <div class="flex gap-2">
+          <button id="gdrive-modal-btn" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all">
+            <i data-lucide="cloud-cog" class="w-4 h-4"></i>${state.googleSheetUrl ? 'Pengaturan Google Drive' : 'Hubungkan Google Drive'}
+          </button>
           <button id="export-pdf-btn" class="flex items-center gap-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all">
             <i data-lucide="printer" class="w-4 h-4"></i>Cetak Laporan
           </button>
@@ -925,6 +1018,12 @@
   // EVENT BINDINGS
   // ==============================
   function bind() {
+    renderHeaderSyncStatus();
+
+    // Sync status click -> open GDrive Modal
+    document.getElementById('sync-status-badge')?.addEventListener('click', openGDriveModal);
+    document.getElementById('gdrive-modal-btn')?.addEventListener('click', openGDriveModal);
+
     // Tab navigation
     document.querySelectorAll('.tab-btn, .mobile-nav-item').forEach(b => b.addEventListener('click', () => {
       state.tab = b.dataset.tab;
@@ -989,7 +1088,6 @@
     document.querySelectorAll('.boq-edit-btn').forEach(b => b.addEventListener('click', () => {
       const id = parseInt(b.dataset.id);
       if (state.editingBoqId === id) {
-        // Save changes from inputs
         document.querySelectorAll(`.boq-edit-field[data-id="${id}"]`).forEach(inp => {
           const field = inp.dataset.field, val = inp.value;
           const item = state.boq.find(x => x.id === id);
@@ -1049,7 +1147,75 @@
   }
 
   // ==============================
-  // MODALS
+  // GOOGLE DRIVE MODAL
+  // ==============================
+  function openGDriveModal() {
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `
+    <div class="modal-overlay" id="modal-bg">
+      <div class="modal-content p-6 space-y-5">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="text-base font-black flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <i data-lucide="cloud" class="w-5 h-5"></i>Google Drive / Sheets Cloud Sync
+          </h3>
+          <button id="close-modal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
+        </div>
+        <div class="space-y-4 text-xs">
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Hubungkan aplikasi ke file Google Sheets yang ada di Google Drive Anda untuk sinkronisasi otomatis multi-user di HP & Laptop.
+          </p>
+
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">URL Google Apps Script Web App</label>
+            <input type="url" id="gscript-url" value="${state.googleSheetUrl}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl font-mono text-[11px] focus:ring-2 focus:ring-emerald-500/30 outline-none"/>
+          </div>
+
+          <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2 text-[11px]">
+            <p class="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5"><i data-lucide="info" class="w-4 h-4"></i>Belum punya URL Apps Script?</p>
+            <p class="text-emerald-700 dark:text-emerald-400 leading-relaxed">
+              Buka panduan lengkap pembuatan Apps Script di file <span class="font-bold underline">GOOGLE_SHEETS_SETUP.md</span> di repositori GitHub Anda.
+            </p>
+          </div>
+
+          <div class="flex justify-between items-center pt-2">
+            ${state.googleSheetUrl ? `<button type="button" id="pull-gdrive-btn" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center gap-1.5 shadow-md"><i data-lucide="download-cloud" class="w-4 h-4"></i>Tarik Data Sekarang</button>` : '<div></div>'}
+            <div class="flex gap-2">
+              <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Tutup</button>
+              <button type="button" id="save-gdrive-btn" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/25">Simpan & Hubungkan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    if (window.lucide) lucide.createIcons();
+    const close = () => { root.innerHTML = ''; };
+    document.getElementById('close-modal').onclick = close;
+    document.getElementById('cancel-modal').onclick = close;
+    document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
+
+    document.getElementById('save-gdrive-btn').onclick = () => {
+      const url = document.getElementById('gscript-url').value.trim();
+      state.googleSheetUrl = url;
+      save('googleSheetUrl', url);
+      close();
+      if (url) {
+        toast('Google Drive berhasil terhubung!', 'success');
+        pullFromGoogleSheets();
+      } else {
+        toast('Koneksi Google Drive dilepas', 'info');
+        render();
+      }
+    };
+
+    document.getElementById('pull-gdrive-btn')?.addEventListener('click', () => {
+      close();
+      pullFromGoogleSheets();
+    });
+  }
+
+  // ==============================
+  // MODALS OTHER
   // ==============================
   function openAddProjectModal() {
     if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
@@ -1166,6 +1332,9 @@
   // ==============================
   function boot() {
     render();
+    if (state.googleSheetUrl) {
+      pullFromGoogleSheets();
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
