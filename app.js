@@ -1,5 +1,5 @@
 /**
- * Construction Hub v3.1 - Enterprise Site & Financial Management
+ * Construction Hub v3.2 - Enterprise Site & Financial Management
  * Premium PWA with Google Drive / Google Sheets Cloud Sync Integration
  */
 (function () {
@@ -8,6 +8,8 @@
   // ==============================
   // DATA LAYER & DEFAULTS (CLEAN INITIAL DATA)
   // ==============================
+  const DATA_VERSION = 'v3.2_single_project_reset';
+
   const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
     { id: 'u2', name: 'Sarah Jenkins', role: 'Project Manager', initials: 'SJ', color: 'bg-emerald-600', email: 'sarah.j@constructionhub.co.id' },
@@ -59,6 +61,17 @@
   const NOTIFICATIONS = [
     { id: 1, type: 'info', title: 'Selamat Datang di Construction Hub', desc: 'Sistem siap digunakan. Tambahkan proyek baru dari tombol (+)', time: 'Baru saja', read: false }
   ];
+
+  // Auto-reset cache on version update
+  try {
+    const currentVer = localStorage.getItem('chub_ver');
+    if (currentVer !== DATA_VERSION) {
+      localStorage.removeItem('chub_projects');
+      localStorage.removeItem('chub_boq');
+      localStorage.removeItem('chub_logs');
+      localStorage.setItem('chub_ver', DATA_VERSION);
+    }
+  } catch (e) {}
 
   // ==============================
   // STATE ENGINE (localStorage & Cloud)
@@ -284,7 +297,7 @@
           <div class="hidden sm:block">
             <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
               CONSTRUCTION HUB
-              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.1</span>
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.2</span>
             </h1>
             <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
