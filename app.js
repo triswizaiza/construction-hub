@@ -1,5 +1,5 @@
 /**
- * Construction Hub v3.4 - Enterprise Site & Financial Management
+ * Construction Hub v3.5 - Enterprise Site & Financial Management
  * Premium PWA with Google Drive / Google Sheets Cloud Sync Integration
  */
 (function () {
@@ -8,9 +8,8 @@
   // ==============================
   // DATA LAYER & DEFAULTS (CLEAN INITIAL DATA)
   // ==============================
-  const DATA_VERSION = 'v3.4_project_boq';
+  const DATA_VERSION = 'v3.5_project_daily_logs';
   const CLOUD_SYNC_DELAY = 800;
-  const DEFAULT_LOG_PHOTO = 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80';
 
   const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
@@ -56,7 +55,7 @@
   ];
 
   const DEFAULT_LOGS = [
-    { id: 101, date: '2026-08-01', project: 'Proyek Contoh: Skyline Tower', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', workers: 48, safety: 'PASS', safetyNote: 'Toolbox meeting selesai dan area kerja dinyatakan aman.', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' }
+    { id: 101, projectId: 1, date: '2026-08-01', project: 'Proyek Contoh: Skyline Tower', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', workers: 48, safety: 'PASS', safetyResolved: true, safetyNote: 'Toolbox meeting selesai dan area kerja dinyatakan aman.', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' }
   ];
 
   const NOTIFICATIONS = [
@@ -92,11 +91,12 @@
     return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate ? candidate : fallback;
   };
   const safeImageUrl = value => {
+    if (!String(value || '').trim()) return '';
     try {
       const url = new URL(String(value || ''));
-      return url.protocol === 'https:' ? url.href : DEFAULT_LOG_PHOTO;
+      return url.protocol === 'https:' ? url.href : '';
     } catch (e) {
-      return DEFAULT_LOG_PHOTO;
+      return '';
     }
   };
 
@@ -149,18 +149,37 @@
     };
   }
 
-  function normalizeLog(log = {}, index = 0) {
+  function normalizeLog(log = {}, index = 0, fallbackProjectId = null) {
+    const safety = log.safety === 'WARNING' ? 'WARNING' : 'PASS';
+    const linkedProjectId = numberValue(log.projectId, fallbackProjectId);
     return {
       id: numberValue(log.id, Date.now() + index),
+      projectId: linkedProjectId > 0 ? linkedProjectId : fallbackProjectId,
       date: validDate(log.date),
       project: textValue(log.project, 'Proyek tidak diketahui'),
       author: textValue(log.author, 'Pengawas lapangan'),
       summary: textValue(log.summary, 'Tidak ada ringkasan.'),
       workers: Math.max(0, Math.round(numberValue(log.workers))),
-      safety: log.safety === 'WARNING' ? 'WARNING' : 'PASS',
-      safetyNote: textValue(log.safetyNote, log.safety === 'WARNING' ? 'Perlu tindak lanjut K3.' : ''),
+      safety,
+      safetyResolved: safety === 'PASS' || log.safetyResolved === true,
+      safetyNote: textValue(log.safetyNote, safety === 'WARNING' ? 'Perlu tindak lanjut K3.' : ''),
       photo: safeImageUrl(log.photo)
     };
+  }
+
+  function normalizeLogsForProjects(logs, projects) {
+    const safeProjects = Array.isArray(projects) ? projects : [];
+    const fallbackProject = safeProjects[0] || null;
+    return (Array.isArray(logs) ? logs : []).map((log, index) => {
+      const explicitProjectId = numberValue(log?.projectId, null);
+      const legacyProjectName = textValue(log?.project, '').toLowerCase();
+      const project = safeProjects.find(item => item.id === explicitProjectId)
+        || safeProjects.find(item => item.name.toLowerCase() === legacyProjectName)
+        || fallbackProject;
+      const normalized = normalizeLog(log, index, project?.id || null);
+      if (project) normalized.project = project.name;
+      return normalized;
+    });
   }
 
   function normalizeNotification(notification = {}, index = 0) {
@@ -205,11 +224,12 @@
     if (!validProjectIds.has(normalized.projectId)) normalized.projectId = defaultBoqProjectId;
     return normalized;
   });
+  const normalizedLogs = normalizeLogsForProjects(Array.isArray(loadedLogs) ? loadedLogs : DEFAULT_LOGS, normalizedProjects);
 
   let state = {
     projects: normalizedProjects,
     boq: normalizedBoq,
-    logs: (Array.isArray(loadedLogs) ? loadedLogs : DEFAULT_LOGS).map(normalizeLog),
+    logs: normalizedLogs,
     notifs: (Array.isArray(loadedNotifs) ? loadedNotifs : clone(NOTIFICATIONS)).filter(item => item && typeof item === 'object').map(normalizeNotification),
     user: USERS.find(user => user.id === loadedUser?.id) || USERS[0],
     revenue: Math.max(0, numberValue(load('revenue', 30000000000), 30000000000)),
@@ -223,6 +243,8 @@
     boqFilter: 'All',
     boqSort: 'name',
     boqProjectId: defaultBoqProjectId,
+    logProjectId: defaultBoqProjectId,
+    logFilter: 'All',
     showNotifs: false,
     showUserMenu: false,
     editingBoqId: null,
@@ -253,7 +275,9 @@
     state.projects = clone(DEFAULT_PROJECTS).map(normalizeProject);
     state.boq = clone(DEFAULT_BOQ).map((item, index) => normalizeBoqItem(item, index, state.projects[0]?.id || null));
     state.boqProjectId = state.projects[0]?.id || null;
-    state.logs = clone(DEFAULT_LOGS).map(normalizeLog);
+    state.logs = normalizeLogsForProjects(clone(DEFAULT_LOGS), state.projects);
+    state.logProjectId = state.projects[0]?.id || null;
+    state.logFilter = 'All';
     state.notifs = clone(NOTIFICATIONS);
     save('projects', state.projects, { sync: false });
     save('boq', state.boq, { sync: false });
@@ -329,6 +353,9 @@
           if (!state.projects.some(project => project.id === state.boqProjectId)) {
             state.boqProjectId = state.projects[0]?.id || null;
           }
+          if (!state.projects.some(project => project.id === state.logProjectId)) {
+            state.logProjectId = state.projects[0]?.id || null;
+          }
           save('projects', state.projects, { sync: false });
         }
         if (res && Array.isArray(res.boq) && res.boq.length) {
@@ -342,7 +369,7 @@
           save('boq', state.boq, { sync: false });
         }
         if (res && Array.isArray(res.siteLogs) && res.siteLogs.length) {
-          state.logs = res.siteLogs.map(normalizeLog);
+          state.logs = normalizeLogsForProjects(res.siteLogs, state.projects);
           save('logs', state.logs, { sync: false });
         }
         state.lastSyncAt = new Date();
@@ -516,7 +543,7 @@
           <div class="hidden sm:block">
             <h1 class="text-sm font-black tracking-tight flex items-center gap-2">
               CONSTRUCTION HUB
-              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.4</span>
+              <span class="text-[9px] bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-2 py-0.5 rounded-full font-bold">PRO v3.5</span>
             </h1>
             <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Management</p>
           </div>
@@ -524,7 +551,7 @@
 
         <!-- Desktop Nav -->
         <nav class="hidden lg:flex items-center bg-slate-100/80 dark:bg-slate-800/50 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-700/30">
-          ${['dashboard|layout-dashboard|Dashboard', 'projects|folder-kanban|Proyek', 'boq|calculator|BOQ / RAB', 'sitelog|clipboard-check|Log Lapangan', 'pam|shield-check|PAM'].map(t => {
+          ${['dashboard|layout-dashboard|Dashboard', 'projects|folder-kanban|Proyek', 'boq|calculator|BOQ / RAB', 'sitelog|clipboard-check|Laporan Harian', 'pam|shield-check|PAM'].map(t => {
             const [id, icon, label] = t.split('|');
             const active = state.tab === id;
             return `<button class="tab-btn flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${active ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}" data-tab="${id}"><i data-lucide="${icon}" class="w-3.5 h-3.5"></i>${label}</button>`;
@@ -632,10 +659,14 @@
     const completedProjects = state.projects.filter(p => p.status === 'Completed').length;
     const overdueProjects = state.projects.filter(p => p.status !== 'Completed' && daysUntil(p.dueDate) < 0);
     const dueSoonProjects = state.projects.filter(p => p.status !== 'Completed' && daysUntil(p.dueDate) >= 0 && daysUntil(p.dueDate) <= 30);
-    const warningLogs = state.logs.filter(log => log.safety === 'WARNING');
+    const warningLogs = state.logs.filter(log => log.safety === 'WARNING' && !log.safetyResolved);
     const todayLogs = state.logs.filter(log => log.date === todayISO());
-    const workersToday = todayLogs.reduce((total, log) => total + log.workers, 0);
-    const latestWarning = [...warningLogs].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const latestTodayByProject = new Map();
+    [...todayLogs].sort((a, b) => b.id - a.id).forEach(log => {
+      if (!latestTodayByProject.has(log.projectId)) latestTodayByProject.set(log.projectId, log);
+    });
+    const workersToday = [...latestTodayByProject.values()].reduce((total, log) => total + log.workers, 0);
+    const latestWarning = [...warningLogs].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)[0];
     return `
     <div class="space-y-6 animate-fade-in">
       <!-- Greeting -->
@@ -693,7 +724,7 @@
               <i data-lucide="shield-check" class="w-5 h-5 text-emerald-300"></i>
             </div>
             <h4 class="text-lg font-black mt-3">K3 & Tenggat Proyek</h4>
-            <p class="text-xs text-indigo-200/70 mt-1">Ringkasan langsung dari log lapangan dan jadwal proyek.</p>
+            <p class="text-xs text-indigo-200/70 mt-1">Ringkasan langsung dari laporan harian dan jadwal proyek.</p>
           </div>
           <div class="grid grid-cols-3 gap-2 my-4">
             <button class="tab-btn p-3 rounded-xl bg-white/10 border border-white/10 text-left hover:bg-white/15 transition-all" data-tab="sitelog">
@@ -894,8 +925,9 @@
     if (!p) return '<p class="text-center py-16 text-slate-500">Proyek tidak ditemukan.</p>';
     const h = health(p);
     const deadline = deadlineMeta(p);
-    const projectLogs = state.logs.filter(log => log.project === p.name).sort((a, b) => b.date.localeCompare(a.date));
+    const projectLogs = state.logs.filter(log => log.projectId === p.id).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
     const latestLog = projectLogs[0];
+    const openSafetyFindings = projectLogs.filter(log => log.safety === 'WARNING' && !log.safetyResolved).length;
     const projectBoq = calculateBoqMetrics(state.boq.filter(item => item.projectId === p.id), p.budget);
     const maxCF = Math.max(...(p.cashflow || []).map(cf => Math.max(cf.budgeted, cf.actual)), 1);
     return `
@@ -919,6 +951,7 @@
               </p>
             </div>
             <div class="flex items-center gap-3">
+              <button id="project-log-btn" class="px-3 py-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold hover:bg-indigo-500/20 transition-all flex items-center gap-1.5 no-print"><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i>Laporan</button>
               <button id="project-boq-btn" class="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold hover:bg-emerald-500/20 transition-all flex items-center gap-1.5 no-print"><i data-lucide="calculator" class="w-3.5 h-3.5"></i>RAB</button>
               ${hasPerm('edit_projects') ? `
                 <div class="flex flex-col gap-2 no-print">
@@ -1032,11 +1065,11 @@
           </div>
         </div>
         <div class="flex items-center gap-3 sm:border-l sm:border-slate-100 dark:sm:border-slate-800 sm:pl-4">
-          <div class="p-3 rounded-xl ${latestLog?.safety === 'WARNING' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}"><i data-lucide="${latestLog?.safety === 'WARNING' ? 'shield-alert' : 'shield-check'}" class="w-7 h-7"></i></div>
+          <div class="p-3 rounded-xl ${openSafetyFindings ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}"><i data-lucide="${openSafetyFindings ? 'shield-alert' : 'shield-check'}" class="w-7 h-7"></i></div>
           <div>
             <p class="text-[10px] font-bold uppercase text-slate-400">Inspeksi K3 Terakhir</p>
             <h4 class="text-sm font-black mt-0.5">${latestLog ? formatDate(latestLog.date) : 'Belum ada laporan'}</h4>
-            <p class="text-xs text-slate-500 mt-1">${latestLog ? `${latestLog.workers} pekerja • K3 ${latestLog.safety}` : 'Tambahkan log lapangan untuk memulai pemantauan.'}</p>
+            <p class="text-xs text-slate-500 mt-1">${latestLog ? `${latestLog.workers} pekerja • ${openSafetyFindings ? `${openSafetyFindings} temuan perlu ditindaklanjuti` : 'tidak ada temuan aktif'}` : 'Tambahkan laporan harian untuk memulai pemantauan.'}</p>
           </div>
         </div>
       </div>
@@ -1199,44 +1232,108 @@
   // 5. SITE LOG
   // ==============================
   function sitelogHTML() {
+    if (!state.projects.length) {
+      return `<div class="card p-10 text-center animate-fade-in"><i data-lucide="clipboard-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i><h2 class="text-xl font-black">Belum ada proyek untuk dilaporkan</h2><p class="text-sm text-slate-500 mt-2">Laporan harian selalu terhubung ke satu proyek.</p><button class="tab-btn mt-5 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold" data-tab="projects">Buka Halaman Proyek</button></div>`;
+    }
+    const selectedProject = state.projects.find(project => project.id === state.logProjectId) || state.projects[0];
+    if (state.logProjectId !== selectedProject.id) state.logProjectId = selectedProject.id;
+    const projectLogs = state.logs
+      .filter(log => log.projectId === selectedProject.id)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+    const openWarnings = projectLogs.filter(log => log.safety === 'WARNING' && !log.safetyResolved);
+    const latestLog = projectLogs[0];
+    const visibleLogs = projectLogs.filter(log => {
+      if (state.logFilter === 'Open') return log.safety === 'WARNING' && !log.safetyResolved;
+      if (state.logFilter === 'Closed') return log.safety === 'PASS' || log.safetyResolved;
+      return true;
+    });
     return `
     <div class="space-y-6 animate-fade-in">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Field Reports</p>
-          <h2 class="text-2xl font-black tracking-tight">Log Lapangan & Inspeksi K3</h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Catatan harian pengawasan, foto proyek, & audit keselamatan kerja.</p>
+          <p class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Daily Site Control</p>
+          <h2 class="text-2xl font-black tracking-tight">Laporan Harian Proyek</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Ringkasan progres, tenaga kerja, bukti foto, dan tindak lanjut K3 per proyek.</p>
         </div>
-        ${hasPerm('add_sitelog') ? `<button id="add-log-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25 shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Buat Laporan</button>` : ''}
+        ${hasPerm('add_sitelog') ? `<button id="add-log-btn" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/25 shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Tambah Laporan Hari Ini</button>` : ''}
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        ${state.logs.map((log, i) => `
-          <div class="card p-0 overflow-hidden animate-slide-up" style="animation-delay: ${i * 100}ms; animation-fill-mode: both">
-            <div class="h-52 w-full overflow-hidden relative group">
-              <img src="${escapeHTML(log.photo)}" alt="${escapeHTML(log.project)}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy"/>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-              <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                <i data-lucide="calendar" class="w-3 h-3 text-cyan-400"></i>${formatDate(log.date)}
-              </div>
-              <div class="absolute bottom-3 right-3">
-                <span class="badge ${log.safety === 'PASS' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}" style="font-size: 0.6rem">
-                  <i data-lucide="${log.safety === 'PASS' ? 'shield-check' : 'shield-alert'}" class="w-3 h-3"></i>K3: ${log.safety}
-                </span>
-              </div>
-              <h3 class="absolute bottom-3 left-3 text-white font-black text-sm drop-shadow-lg">${escapeHTML(log.project)}</h3>
-            </div>
-            <div class="p-5 space-y-3">
-              <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHTML(log.summary)}</p>
-              ${log.safetyNote ? `<div class="p-3 rounded-xl ${log.safety === 'WARNING' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'} text-[11px] flex items-start gap-2"><i data-lucide="${log.safety === 'WARNING' ? 'triangle-alert' : 'clipboard-check'}" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${escapeHTML(log.safetyNote)}</span></div>` : ''}
-              <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="users" class="w-3 h-3 text-indigo-500"></i>${log.workers} Pekerja</span>
-                <span class="text-slate-400 flex items-center gap-1"><i data-lucide="hard-hat" class="w-3 h-3 text-amber-500"></i>K3 ${log.safety}</span>
-              </div>
-              <p class="text-[10px] text-slate-400">Pengawas: <span class="font-bold text-slate-600 dark:text-slate-300">${escapeHTML(log.author)}</span></p>
-            </div>
+      <div class="card p-5">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-end">
+          <div class="lg:col-span-2">
+            <label for="log-project-select" class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Pilih Proyek</label>
+            <select id="log-project-select" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/30">
+              ${state.projects.map(project => `<option value="${project.id}" ${project.id === selectedProject.id ? 'selected' : ''}>${escapeHTML(project.name)}</option>`).join('')}
+            </select>
           </div>
-        `).join('') || '<div class="md:col-span-2 xl:col-span-3 card p-10 text-center text-slate-400">Belum ada laporan lapangan.</div>'}
+          <div class="rounded-xl bg-indigo-500/10 p-3">
+            <p class="text-[9px] font-black uppercase text-indigo-500">Total Laporan</p>
+            <p class="text-xl font-black mt-1">${projectLogs.length}</p>
+          </div>
+          <div class="rounded-xl bg-cyan-500/10 p-3">
+            <p class="text-[9px] font-black uppercase text-cyan-600 dark:text-cyan-400">Pekerja Terakhir</p>
+            <p class="text-xl font-black mt-1">${latestLog ? latestLog.workers : 0}</p>
+          </div>
+          <div class="rounded-xl ${openWarnings.length ? 'bg-amber-500/10' : 'bg-emerald-500/10'} p-3">
+            <p class="text-[9px] font-black uppercase ${openWarnings.length ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}">Temuan K3 Aktif</p>
+            <p class="text-xl font-black mt-1">${openWarnings.length}</p>
+          </div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase font-black text-slate-400">Scope aktif</p>
+            <p class="text-sm font-black mt-0.5">${escapeHTML(selectedProject.name)}</p>
+            <p class="text-[11px] text-slate-500">${escapeHTML(selectedProject.location)} • Update terakhir: ${latestLog ? formatDate(latestLog.date) : 'belum ada'}</p>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            ${[
+              ['All', 'Semua'],
+              ['Open', 'Perlu Tindak Lanjut'],
+              ['Closed', 'Selesai & Aman']
+            ].map(([value, label]) => `<button class="log-filter-btn px-3 py-2 rounded-xl text-[10px] font-bold ${state.logFilter === value ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}" data-filter="${value}">${label}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        ${visibleLogs.map((log, i) => {
+          const isOpenWarning = log.safety === 'WARNING' && !log.safetyResolved;
+          const isResolvedWarning = log.safety === 'WARNING' && log.safetyResolved;
+          const statusLabel = isOpenWarning ? 'Perlu tindak lanjut' : log.safety === 'WARNING' ? 'Temuan selesai' : 'K3 Aman';
+          return `
+          <article class="card p-5 animate-slide-up" style="animation-delay: ${Math.min(i * 60, 300)}ms; animation-fill-mode: both">
+            <div class="flex flex-col md:flex-row gap-4">
+              <div class="md:w-28 shrink-0">
+                <div class="rounded-xl ${isOpenWarning ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'} p-3 text-center">
+                  <i data-lucide="calendar-days" class="w-5 h-5 mx-auto mb-1"></i>
+                  <p class="text-[11px] font-black">${formatDate(log.date)}</p>
+                </div>
+              </div>
+              <div class="flex-1 min-w-0 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                  <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="badge ${isOpenWarning ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'}"><i data-lucide="${isOpenWarning ? 'shield-alert' : 'shield-check'}" class="w-3 h-3"></i>${statusLabel}</span>
+                      <span class="text-[11px] text-slate-400"><i data-lucide="users" class="w-3 h-3 inline mr-1"></i>${log.workers} pekerja</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2">Dilaporkan oleh <span class="font-bold text-slate-600 dark:text-slate-300">${escapeHTML(log.author)}</span></p>
+                  </div>
+                  ${hasPerm('add_sitelog') ? `<div class="flex items-center gap-1 no-print">
+                    <button class="log-edit-btn p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10" data-id="${log.id}" aria-label="Edit laporan"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                    <button class="log-delete-btn p-2 rounded-lg text-rose-500 hover:bg-rose-500/10" data-id="${log.id}" aria-label="Hapus laporan"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                  </div>` : ''}
+                </div>
+                <p class="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">${escapeHTML(log.summary)}</p>
+                ${log.safetyNote ? `<div class="p-3 rounded-xl ${isOpenWarning ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'} text-[11px] flex items-start gap-2"><i data-lucide="${isOpenWarning ? 'triangle-alert' : 'clipboard-check'}" class="w-3.5 h-3.5 mt-0.5 shrink-0"></i><span>${escapeHTML(log.safetyNote)}</span></div>` : ''}
+                <div class="flex items-center gap-2 flex-wrap pt-1">
+                  ${isOpenWarning && hasPerm('add_sitelog') ? `<button class="log-resolve-btn px-3 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1.5" data-id="${log.id}"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>Tandai Sudah Ditindaklanjuti</button>` : ''}
+                  ${isResolvedWarning && hasPerm('add_sitelog') ? `<button class="log-reopen-btn px-3 py-2 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-bold flex items-center gap-1.5" data-id="${log.id}"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Buka Kembali Temuan</button>` : ''}
+                  ${log.photo ? `<a href="${escapeHTML(log.photo)}" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold flex items-center gap-1.5"><i data-lucide="image" class="w-3.5 h-3.5"></i>Lihat Bukti Foto</a>` : ''}
+                </div>
+              </div>
+            </div>
+          </article>`;
+        }).join('') || `<div class="card p-10 text-center text-slate-400"><i data-lucide="clipboard-list" class="w-10 h-10 mx-auto mb-3 text-slate-300"></i><p class="font-bold">${projectLogs.length ? 'Tidak ada laporan pada filter ini.' : 'Belum ada laporan harian untuk proyek ini.'}</p><p class="text-xs mt-1">${projectLogs.length ? 'Pilih filter lain untuk melihat laporan.' : 'Tambahkan laporan saat pekerjaan lapangan dimulai.'}</p></div>`}
       </div>
     </div>`;
   }
@@ -1538,24 +1635,75 @@
       state.tab = 'boq';
       render();
     });
+    document.getElementById('project-log-btn')?.addEventListener('click', () => {
+      const project = state.projects.find(item => item.id === state.detailId);
+      if (!project) return;
+      state.logProjectId = project.id;
+      state.logFilter = 'All';
+      state.tab = 'sitelog';
+      render();
+    });
     document.getElementById('delete-project-btn')?.addEventListener('click', () => {
       if (!hasPerm('edit_projects')) return toast('Akses ditolak', 'error');
       const project = state.projects.find(item => item.id === state.detailId);
-      if (!project || !window.confirm(`Hapus proyek "${project.name}" beserta jadwal dan RAB-nya?`)) return;
+      if (!project || !window.confirm(`Hapus proyek "${project.name}" beserta jadwal, RAB, dan laporan hariannya?`)) return;
       const removedBoqCount = state.boq.filter(item => item.projectId === project.id).length;
+      const removedLogCount = state.logs.filter(log => log.projectId === project.id).length;
       state.projects = state.projects.filter(item => item.id !== project.id);
       state.boq = state.boq.filter(item => item.projectId !== project.id);
+      state.logs = state.logs.filter(log => log.projectId !== project.id);
       if (state.boqProjectId === project.id) state.boqProjectId = state.projects[0]?.id || null;
+      if (state.logProjectId === project.id) state.logProjectId = state.projects[0]?.id || null;
       save('boq', state.boq, { sync: false });
+      save('logs', state.logs, { sync: false });
       save('projects', state.projects);
       state.detailId = null;
       state.tab = 'projects';
-      toast(`Proyek dan ${removedBoqCount} item RAB berhasil dihapus`, 'success');
+      toast(`Proyek, ${removedBoqCount} item RAB, dan ${removedLogCount} laporan berhasil dihapus`, 'success');
       render();
     });
 
-    // Add site log
-    document.getElementById('add-log-btn')?.addEventListener('click', openAddLogModal);
+    // Project-scoped daily logs
+    document.getElementById('log-project-select')?.addEventListener('change', event => {
+      const projectId = parseInt(event.target.value);
+      if (!state.projects.some(project => project.id === projectId)) return;
+      state.logProjectId = projectId;
+      state.logFilter = 'All';
+      render();
+    });
+    document.querySelectorAll('.log-filter-btn').forEach(button => button.addEventListener('click', () => {
+      state.logFilter = button.dataset.filter;
+      render();
+    }));
+    document.getElementById('add-log-btn')?.addEventListener('click', () => openAddLogModal());
+    document.querySelectorAll('.log-edit-btn').forEach(button => button.addEventListener('click', () => {
+      const log = state.logs.find(item => item.id === parseInt(button.dataset.id));
+      if (log) openAddLogModal(log);
+    }));
+    document.querySelectorAll('.log-delete-btn').forEach(button => button.addEventListener('click', () => {
+      const log = state.logs.find(item => item.id === parseInt(button.dataset.id));
+      if (!log || !window.confirm(`Hapus laporan tanggal ${formatDate(log.date)}?`)) return;
+      state.logs = state.logs.filter(item => item.id !== log.id);
+      save('logs', state.logs);
+      toast('Laporan harian dihapus', 'success');
+      render();
+    }));
+    document.querySelectorAll('.log-resolve-btn').forEach(button => button.addEventListener('click', () => {
+      const log = state.logs.find(item => item.id === parseInt(button.dataset.id));
+      if (!log || log.safety !== 'WARNING') return;
+      log.safetyResolved = true;
+      save('logs', state.logs);
+      toast('Temuan K3 ditandai sudah ditindaklanjuti', 'success');
+      render();
+    }));
+    document.querySelectorAll('.log-reopen-btn').forEach(button => button.addEventListener('click', () => {
+      const log = state.logs.find(item => item.id === parseInt(button.dataset.id));
+      if (!log || log.safety !== 'WARNING') return;
+      log.safetyResolved = false;
+      save('logs', state.logs);
+      toast('Temuan K3 dibuka kembali', 'warning');
+      render();
+    }));
   }
 
   // ==============================
@@ -1686,7 +1834,7 @@
         Object.assign(existingProject, { name, location, manager, budget, dueDate, spent: Math.max(0, numberValue(document.getElementById('pf-spent').value)) });
         Object.assign(existingProject, normalizeProject(existingProject));
         if (oldName !== name) {
-          state.logs.forEach(log => { if (log.project === oldName) log.project = name; });
+          state.logs.forEach(log => { if (log.projectId === existingProject.id || log.project === oldName) log.project = name; });
           save('logs', state.logs, { sync: false });
         }
         state.detailId = existingProject.id;
@@ -1703,6 +1851,7 @@
           ]
         }, state.projects.length));
         if (!state.boqProjectId) state.boqProjectId = state.projects[state.projects.length - 1].id;
+        if (!state.logProjectId) state.logProjectId = state.projects[state.projects.length - 1].id;
         state.tab = 'projects';
       }
       save('projects', state.projects);
@@ -1712,39 +1861,54 @@
     };
   }
 
-  function openAddLogModal() {
+  function openAddLogModal(existingLog = null) {
     if (!hasPerm('add_sitelog')) return toast('Akses ditolak', 'error');
-    const activeProjects = state.projects.filter(p => p.status !== 'Completed');
+    const editing = Boolean(existingLog);
+    const activeProjects = state.projects.filter(project => project.status !== 'Completed' || project.id === existingLog?.projectId);
     if (!activeProjects.length) return toast('Tidak ada proyek aktif untuk dilaporkan', 'warning');
+    const selectedProjectId = activeProjects.some(project => project.id === existingLog?.projectId)
+      ? existingLog.projectId
+      : activeProjects.some(project => project.id === state.logProjectId)
+        ? state.logProjectId
+        : activeProjects[0].id;
+    const formLog = existingLog || {
+      date: todayISO(),
+      summary: '',
+      workers: 30,
+      safety: 'PASS',
+      safetyNote: '',
+      photo: ''
+    };
     const root = document.getElementById('modal-root');
     root.innerHTML = `
     <div class="modal-overlay" id="modal-bg">
       <div class="modal-content p-6 space-y-5">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-500"></i>Buat Laporan Harian</h3>
+          <h3 class="text-base font-black flex items-center gap-2"><i data-lucide="clipboard-check" class="w-5 h-5 text-indigo-500"></i>${editing ? 'Edit Laporan Harian' : 'Tambah Laporan Harian'}</h3>
           <button id="close-modal" aria-label="Tutup" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button>
         </div>
         <form id="log-form" class="space-y-4 text-xs">
-          <div><label class="block font-bold text-slate-500 mb-1.5">Proyek *</label>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-proj">Proyek *</label>
             <select id="lf-proj" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
-              ${activeProjects.map(p => `<option value="${escapeHTML(p.name)}">${escapeHTML(p.name)}</option>`).join('')}
+              ${activeProjects.map(project => `<option value="${project.id}" ${project.id === selectedProjectId ? 'selected' : ''}>${escapeHTML(project.name)}</option>`).join('')}
             </select>
           </div>
-          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-sum">Ringkasan Laporan *</label><textarea id="lf-sum" required maxlength="1000" rows="3" placeholder="Deskripsi pekerjaan hari ini..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-sum">Progres / Pekerjaan Hari Ini *</label><textarea id="lf-sum" required maxlength="1000" rows="3" placeholder="Contoh: pengecoran lantai 12 selesai, volume 85 m³..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none">${escapeHTML(formLog.summary)}</textarea></div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-date">Tanggal Laporan</label><input type="date" id="lf-date" value="${todayISO()}" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
-            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-workers">Jumlah Pekerja</label><input type="number" min="0" step="1" id="lf-workers" value="30" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
-            <div><label class="block font-bold text-slate-500 mb-1.5">Status K3</label>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-date">Tanggal Laporan</label><input type="date" id="lf-date" max="${todayISO()}" value="${formLog.date}" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-workers">Jumlah Pekerja</label><input type="number" min="0" step="1" id="lf-workers" value="${formLog.workers}" required class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+            <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-safety">Status K3</label>
               <select id="lf-safety" class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30">
-                <option value="PASS">PASS</option><option value="WARNING">WARNING</option>
+                <option value="PASS" ${formLog.safety === 'PASS' ? 'selected' : ''}>Aman / Tidak Ada Temuan</option>
+                <option value="WARNING" ${formLog.safety === 'WARNING' ? 'selected' : ''}>Ada Temuan / Perlu Tindak Lanjut</option>
               </select>
             </div>
           </div>
-          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-safety-note">Catatan / Tindak Lanjut K3</label><textarea id="lf-safety-note" maxlength="500" rows="2" placeholder="Contoh: Toolbox meeting selesai atau detail temuan K3..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"></textarea></div>
-          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-photo">URL Foto (opsional)</label><input type="url" id="lf-photo" placeholder="https://..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-safety-note">Catatan K3 / Tindak Lanjut</label><textarea id="lf-safety-note" maxlength="500" rows="2" placeholder="Wajib diisi jika ada temuan K3..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none">${escapeHTML(formLog.safetyNote)}</textarea></div>
+          <div><label class="block font-bold text-slate-500 mb-1.5" for="lf-photo">Tautan Bukti Foto (opsional)</label><input type="url" id="lf-photo" value="${escapeHTML(formLog.photo || '')}" placeholder="https://..." class="w-full p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/30"/></div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" id="cancel-modal" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl">Batal</button>
-            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">Simpan Laporan</button>
+            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25">${editing ? 'Simpan Perubahan' : 'Simpan Laporan'}</button>
           </div>
         </form>
       </div>
@@ -1756,21 +1920,38 @@
     document.getElementById('modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') close(); });
     document.getElementById('log-form').onsubmit = e => {
       e.preventDefault();
+      const projectId = parseInt(document.getElementById('lf-proj').value);
+      const project = state.projects.find(item => item.id === projectId);
+      const date = validDate(document.getElementById('lf-date').value);
+      const summary = document.getElementById('lf-sum').value.trim();
+      const workers = Math.max(0, Math.round(numberValue(document.getElementById('lf-workers').value)));
       const safety = document.getElementById('lf-safety').value;
       const safetyNote = document.getElementById('lf-safety-note').value.trim();
-      if (safety === 'WARNING' && !safetyNote) return toast('Status WARNING memerlukan catatan tindak lanjut K3', 'warning');
-      state.logs.unshift(normalizeLog({
-        id: Date.now(), date: document.getElementById('lf-date').value,
-        project: document.getElementById('lf-proj').value,
-        author: state.user.name,
-        summary: document.getElementById('lf-sum').value.trim(),
-        workers: parseInt(document.getElementById('lf-workers').value) || 0,
+      if (!project || !summary) return toast('Lengkapi proyek dan progres pekerjaan', 'warning');
+      if (date > todayISO()) return toast('Tanggal laporan tidak boleh melewati hari ini', 'warning');
+      if (safety === 'WARNING' && !safetyNote) return toast('Temuan K3 memerlukan catatan tindak lanjut', 'warning');
+      const duplicate = state.logs.some(log => log !== existingLog && log.projectId === projectId && log.date === date);
+      if (duplicate) return toast('Laporan proyek pada tanggal tersebut sudah ada. Edit laporan yang tersedia.', 'warning');
+      const normalized = normalizeLog({
+        id: existingLog?.id || Date.now(),
+        projectId,
+        date,
+        project: project.name,
+        author: existingLog?.author || state.user.name,
+        summary,
+        workers,
         safety,
+        safetyResolved: safety === 'PASS' || (existingLog?.safety === 'WARNING' && existingLog.safetyResolved === true),
         safetyNote,
-        photo: document.getElementById('lf-photo').value.trim() || DEFAULT_LOG_PHOTO
-      }, state.logs.length));
+        photo: document.getElementById('lf-photo').value.trim()
+      }, state.logs.length, projectId);
+      if (editing) Object.assign(existingLog, normalized);
+      else state.logs.unshift(normalized);
       save('logs', state.logs);
-      close(); toast('Laporan harian berhasil disimpan!', 'success');
+      state.logProjectId = projectId;
+      state.logFilter = 'All';
+      close();
+      toast(editing ? 'Laporan harian diperbarui' : 'Laporan harian berhasil disimpan', 'success');
       render();
     };
   }

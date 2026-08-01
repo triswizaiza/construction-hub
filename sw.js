@@ -1,9 +1,9 @@
-const CACHE_NAME = 'construction-hub-v3.4.0';
+const CACHE_NAME = 'construction-hub-v3.5.1';
 const APP_SHELL = [
   './',
   './index.html',
-  './style.css?v=3.4.0',
-  './app.js?v=3.4.0',
+  './style.css?v=3.5.1',
+  './app.js?v=3.5.1',
   './manifest.json'
 ];
 const OPTIONAL_ASSETS = [
