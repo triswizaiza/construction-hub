@@ -10,6 +10,7 @@
   // ==============================
   const DATA_VERSION = 'v3.5_project_daily_logs';
   const CLOUD_SYNC_DELAY = 800;
+  const EMBEDDED_GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzADnVEJsfk-O9sqg6KMBnbXMwD8gC0PEjo27HbHrSW-iYUd39O-GlYQ-ab9rVzpKLdsA/exec';
 
   const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
@@ -215,7 +216,7 @@
   const loadedLogs = load('logs', DEFAULT_LOGS);
   const loadedNotifs = load('notifs', NOTIFICATIONS);
   const loadedUser = load('user', USERS[0]);
-  const loadedGoogleSheetUrl = load('googleSheetUrl', '');
+  const loadedGoogleSheetUrl = load('googleSheetUrl', EMBEDDED_GOOGLE_SHEET_URL) || EMBEDDED_GOOGLE_SHEET_URL;
   const normalizedProjects = (Array.isArray(loadedProjects) ? loadedProjects : DEFAULT_PROJECTS).map(normalizeProject);
   const defaultBoqProjectId = normalizedProjects[0]?.id || null;
   const validProjectIds = new Set(normalizedProjects.map(project => project.id));
@@ -235,7 +236,7 @@
     revenue: Math.max(0, numberValue(load('revenue', 30000000000), 30000000000)),
     budget: Math.max(0, numberValue(load('budget', 25500000000), 25500000000)),
     dark: load('dark', true) !== false,
-    googleSheetUrl: typeof loadedGoogleSheetUrl === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(loadedGoogleSheetUrl) ? loadedGoogleSheetUrl : '',
+    googleSheetUrl: typeof loadedGoogleSheetUrl === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(loadedGoogleSheetUrl) ? loadedGoogleSheetUrl : EMBEDDED_GOOGLE_SHEET_URL,
     syncing: false,
     tab: 'dashboard',
     detailId: null,
