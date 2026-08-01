@@ -6,7 +6,7 @@
   'use strict';
 
   // ==============================
-  // DATA LAYER & DEFAULTS
+  // DATA LAYER & DEFAULTS (CLEAN INITIAL DATA)
   // ==============================
   const USERS = [
     { id: 'u1', name: 'Bambang Soeprapto', role: 'CEO / Admin', initials: 'BS', color: 'bg-indigo-600', email: 'bambang@constructionhub.co.id' },
@@ -22,9 +22,10 @@
     'Stakeholder': []
   };
 
+  // Minimal Seed Data: Only 1 sample project
   const DEFAULT_PROJECTS = [
     {
-      id: 1, name: 'Skyline Tower Alpha', status: 'In Progress', budget: 25500000000, spent: 14200000000, completion: 65,
+      id: 1, name: 'Proyek Contoh: Skyline Tower', status: 'In Progress', budget: 25500000000, spent: 14200000000, completion: 65,
       manager: 'Sarah Jenkins', location: 'SCBD, Jakarta Selatan', dueDate: '2026-11-15',
       weather: { condition: 'Cerah Berawan', temp: 32, rainRisk: 'Rendah', icon: 'sun', alert: null },
       cashflow: [
@@ -42,67 +43,21 @@
         { id: 104, name: 'Instalasi MEP (M/E/P)', status: 'In Progress', progress: 15, start: '2026-09-01', end: '2026-11-01' },
         { id: 105, name: 'Finishing Interior & Arsitektural', status: 'Pending', progress: 0, start: '2026-10-01', end: '2026-11-15' }
       ]
-    },
-    {
-      id: 2, name: 'Harbor Retail & Resort Complex', status: 'In Progress', budget: 18000000000, spent: 5100000000, completion: 40,
-      manager: 'David Chen', location: 'PIK 2, Tangerang', dueDate: '2027-02-28',
-      weather: { condition: 'Hujan Deras', temp: 27, rainRisk: 'Tinggi', icon: 'cloud-rain', alert: 'Dewatering aktif zona B3' },
-      cashflow: [
-        { month: 'Mar', budgeted: 1500000000, actual: 1200000000 },
-        { month: 'Apr', budgeted: 2000000000, actual: 1800000000 },
-        { month: 'Mei', budgeted: 2000000000, actual: 1100000000 },
-        { month: 'Jun', budgeted: 2500000000, actual: 1000000000 },
-      ],
-      phases: [
-        { id: 201, name: 'Perizinan & AMDAL', status: 'Completed', progress: 100, start: '2026-02-01', end: '2026-04-01' },
-        { id: 202, name: 'Pemancangan & Sheet Pile', status: 'In Progress', progress: 75, start: '2026-04-02', end: '2026-08-30' },
-        { id: 203, name: 'Fondasi Pile Cap & Tie Beam', status: 'Pending', progress: 0, start: '2026-08-15', end: '2026-11-30' },
-        { id: 204, name: 'Struktur Atas Retail Wing', status: 'Pending', progress: 0, start: '2026-11-01', end: '2027-02-28' }
-      ]
-    },
-    {
-      id: 3, name: 'Westside Residential Estate', status: 'Completed', budget: 32000000000, spent: 31400000000, completion: 100,
-      manager: 'Marcus Johnson', location: 'BSD City, Tangerang Selatan', dueDate: '2025-12-20',
-      weather: { condition: 'Cerah', temp: 31, rainRisk: 'Rendah', icon: 'sun', alert: null },
-      cashflow: [
-        { month: 'Jul', budgeted: 4000000000, actual: 4200000000 },
-        { month: 'Agu', budgeted: 5000000000, actual: 5100000000 },
-        { month: 'Sep', budgeted: 6000000000, actual: 5800000000 },
-        { month: 'Okt', budgeted: 7000000000, actual: 6900000000 },
-        { month: 'Nov', budgeted: 5500000000, actual: 5200000000 },
-        { month: 'Des', budgeted: 4500000000, actual: 4200000000 },
-      ],
-      phases: [
-        { id: 301, name: 'Tahap 1 - Cluster Townhouse (40 Unit)', status: 'Completed', progress: 100, start: '2025-01-01', end: '2025-07-01' },
-        { id: 302, name: 'Tahap 2 - Apartment Tower B', status: 'Completed', progress: 100, start: '2025-05-01', end: '2025-11-15' },
-        { id: 303, name: 'Landscaping & Serah Terima', status: 'Completed', progress: 100, start: '2025-11-16', end: '2025-12-20' }
-      ]
     }
   ];
 
   const DEFAULT_BOQ = [
     { id: 1, name: 'Beton ReadyMix K-350 Slump 12±2', category: 'Material', quantity: 650, unit: 'm³', unitCost: 1350000 },
-    { id: 2, name: 'Besi Tulangan Ulir D16 SNI (KS/MG)', category: 'Material', quantity: 85, unit: 'Ton', unitCost: 12800000 },
-    { id: 3, name: 'Bekisting Multiplek Film Face 12mm', category: 'Material', quantity: 2400, unit: 'm²', unitCost: 185000 },
-    { id: 4, name: 'Sewa Excavator Komatsu PC200-8MO', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 380000 },
-    { id: 5, name: 'Sewa Tower Crane Potain MC 85', category: 'Equipment', quantity: 6, unit: 'Bulan', unitCost: 85000000 },
-    { id: 6, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
-    { id: 7, name: 'Upah Mandor & Pelaksana', category: 'Labor', quantity: 180, unit: 'Hari', unitCost: 450000 },
-    { id: 8, name: 'Subkon Plumbing & Fire System', category: 'Subcontractor', quantity: 1, unit: 'Paket', unitCost: 3500000000 },
-    { id: 9, name: 'Subkon MEP & HVAC System', category: 'Subcontractor', quantity: 1, unit: 'Paket', unitCost: 5200000000 }
+    { id: 2, name: 'Upah Tukang Batu & Pembesian', category: 'Labor', quantity: 1200, unit: 'HOK', unitCost: 175000 },
+    { id: 3, name: 'Sewa Excavator Komatsu PC200-8MO', category: 'Equipment', quantity: 180, unit: 'Jam', unitCost: 380000 }
   ];
 
   const DEFAULT_LOGS = [
-    { id: 101, date: '2026-08-01', project: 'Skyline Tower Alpha', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', weather: 'Cerah (32°C)', workers: 48, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' },
-    { id: 102, date: '2026-07-31', project: 'Harbor Retail Complex', author: 'David Chen', summary: 'Pemancangan tiang pancang titik ke-42 dari 120. Delay 2 jam akibat hujan deras. Pompa dewatering 24 jam aktif di zona B3.', weather: 'Hujan (27°C)', workers: 26, safety: 'WARNING', photo: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80' },
-    { id: 103, date: '2026-07-30', project: 'Skyline Tower Alpha', author: 'Sarah Jenkins', summary: 'Pemasangan scaffolding lantai 13-14. Inspeksi K3 terjadwal dilaksanakan tanpa temuan. Safety induction 12 pekerja baru.', weather: 'Berawan (30°C)', workers: 52, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=600&q=80' }
+    { id: 101, date: '2026-08-01', project: 'Proyek Contoh: Skyline Tower', author: 'Sarah Jenkins', summary: 'Pengecoran plat lantai 12 berhasil dengan 14 truk ready mix K-350. Slump test passed. Curing compound telah diaplikasikan.', weather: 'Cerah (32°C)', workers: 48, safety: 'PASS', photo: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=600&q=80' }
   ];
 
   const NOTIFICATIONS = [
-    { id: 1, type: 'warning', title: 'Cuaca Hujan Deras', desc: 'PIK 2 - Risiko tinggi untuk pekerjaan pemancangan', time: '10 menit lalu', read: false },
-    { id: 2, type: 'success', title: 'Progres Updated', desc: 'Skyline Tower - Fase Struktur Atas naik ke 55%', time: '2 jam lalu', read: false },
-    { id: 3, type: 'info', title: 'BOQ Diubah', desc: 'Mike Ross mengubah harga satuan Beton K-350', time: '5 jam lalu', read: true },
-    { id: 4, type: 'danger', title: 'Budget Alert', desc: 'Harbor Complex mendekati batas anggaran fase 2', time: '1 hari lalu', read: true },
+    { id: 1, type: 'info', title: 'Selamat Datang di Construction Hub', desc: 'Sistem siap digunakan. Tambahkan proyek baru dari tombol (+)', time: 'Baru saja', read: false }
   ];
 
   // ==============================
@@ -112,7 +67,6 @@
   const save = (k, v) => {
     try {
       localStorage.setItem('chub_' + k, JSON.stringify(v));
-      // Auto-sync with Google Drive if configured
       if (state.googleSheetUrl && (k === 'projects' || k === 'boq' || k === 'logs')) {
         pushToGoogleSheets();
       }
@@ -125,8 +79,8 @@
     logs: load('logs', DEFAULT_LOGS),
     notifs: load('notifs', NOTIFICATIONS),
     user: load('user', USERS[0]),
-    revenue: load('revenue', 45000000000),
-    budget: load('budget', 100000000000),
+    revenue: load('revenue', 30000000000),
+    budget: load('budget', 25500000000),
     dark: load('dark', true),
     googleSheetUrl: load('googleSheetUrl', ''),
     syncing: false,
@@ -141,6 +95,22 @@
   };
 
   let deferredPWA = null;
+
+  // Clear all localStorage and reset to 1 sample project
+  function resetToSample() {
+    localStorage.removeItem('chub_projects');
+    localStorage.removeItem('chub_boq');
+    localStorage.removeItem('chub_logs');
+    localStorage.removeItem('chub_notifs');
+    state.projects = DEFAULT_PROJECTS;
+    state.boq = DEFAULT_BOQ;
+    state.logs = DEFAULT_LOGS;
+    state.notifs = NOTIFICATIONS;
+    save('projects', state.projects);
+    save('boq', state.boq);
+    save('logs', state.logs);
+    save('notifs', state.notifs);
+  }
 
   // ==============================
   // GOOGLE SHEETS CLOUD SYNC ENGINE
@@ -437,7 +407,10 @@
           <h2 class="text-2xl sm:text-3xl font-black tracking-tight">Selamat ${new Date().getHours() < 12 ? 'Pagi' : new Date().getHours() < 17 ? 'Siang' : 'Malam'}, ${state.user.name.split(' ')[0]} 👋</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Berikut ringkasan portofolio konstruksi Anda hari ini.</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <button id="reset-sample-btn" class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Reset 1 Proyek
+          </button>
           <button id="gdrive-modal-btn" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all">
             <i data-lucide="cloud-cog" class="w-4 h-4"></i>${state.googleSheetUrl ? 'Pengaturan Google Drive' : 'Hubungkan Google Drive'}
           </button>
@@ -479,7 +452,7 @@
           <div>
             <div class="flex items-center justify-between">
               <span class="text-[10px] font-black uppercase tracking-[0.15em] text-indigo-300">Live Weather & Safety</span>
-              <i data-lucide="cloud-lightning" class="w-5 h-5 text-amber-400 animate-pulse-slow"></i>
+              <i data-lucide="cloud-sun" class="w-5 h-5 text-amber-400"></i>
             </div>
             <h4 class="text-lg font-black mt-3">Monitor Cuaca Proyek</h4>
             <p class="text-xs text-indigo-200/70 mt-1">Deteksi dini risiko cuaca lapangan real-time.</p>
@@ -506,7 +479,7 @@
               <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
               <span class="font-bold text-amber-200">${state.projects.find(p => p.weather.alert)?.weather.alert}</span>
             </div>
-          ` : ''}
+          ` : '<div class="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center gap-2 text-xs"><i data-lucide="shield-check" class="w-4 h-4 text-emerald-300"></i><span class="font-bold text-emerald-200">Aman untuk bekerja</span></div>'}
         </div>
       </div>
 
@@ -1019,6 +992,13 @@
   // ==============================
   function bind() {
     renderHeaderSyncStatus();
+
+    // Reset sample button
+    document.getElementById('reset-sample-btn')?.addEventListener('click', () => {
+      resetToSample();
+      toast('Data direset menjadi 1 proyek sampel', 'info');
+      render();
+    });
 
     // Sync status click -> open GDrive Modal
     document.getElementById('sync-status-badge')?.addEventListener('click', openGDriveModal);
